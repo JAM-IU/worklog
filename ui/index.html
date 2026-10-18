@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WorkLog · 工作汇报采集</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- 侧栏 -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">W</div>
+        <div class="brand-text">
+          <div class="brand-name">WorkLog</div>
+          <div class="brand-sub">工作汇报采集</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <button class="nav-item active" data-view="overview">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+          概览
+        </button>
+        <button class="nav-item" data-view="today">
+          <svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>
+          今日记录
+        </button>
+        <button class="nav-item" data-view="report">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>
+          日报
+        </button>
+        <button class="nav-item" data-view="weekly">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          周报
+        </button>
+        <button class="nav-item" data-view="stats">
+          <svg viewBox="0 0 24 24"><path d="M3 21V9M9 21V3M15 21v-7M21 21v-11"/></svg>
+          数据分析
+        </button>
+        <button class="nav-item" data-view="settings">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          设置
+        </button>
+      </nav>
+      <div class="sidebar-bottom">
+        <button class="push-btn" id="pushBtn">
+          <svg viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg>
+          推送到飞书
+        </button>
+        <div class="rec-status" id="recStatus">
+          <span class="dot" id="recDot"></span>
+          <span id="recText">记录中</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="content">
+      <!-- 顶部问候 -->
+      <header class="topbar">
+        <div>
+          <div class="greeting" id="greeting">早上好</div>
+          <div class="greeting-sub" id="greetingSub"></div>
+        </div>
+        <div class="topbar-actions">
+          <span class="pill" id="pillPush"><span class="dot"></span>飞书：待推送</span>
+          <span class="pill ok" id="pillRec"><span class="dot"></span>记录中</span>
+        </div>
+      </header>
+
+      <!-- ========== 概览 ========== -->
+      <section id="view-overview" class="view">
+        <div class="stats">
+          <div class="stat-card">
+            <div class="stat-label">今日记录</div>
+            <div class="stat-value" id="ovCount">0<span class="stat-unit">条</span></div>
+            <div class="stat-foot" id="ovCountDiff">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">工作方向</div>
+            <div class="stat-value" id="ovThemes">0<span class="stat-unit">个</span></div>
+            <div class="stat-foot">业务分类覆盖</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">专注时长</div>
+            <div class="stat-value" id="ovFocus">0<span class="stat-unit">小时</span></div>
+            <div class="stat-foot" id="ovFocusDiff">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">日报状态</div>
+            <div class="stat-value stat-sm" id="ovPush">未推送</div>
+            <div class="stat-foot" id="ovPushTime">18:10 自动推送</div>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div class="card timeline-card">
+            <div class="card-head">
+              <h2>工作轨迹</h2>
+              <span class="card-hint" id="tlHint">自动采集 · 业务分类</span>
+            </div>
+            <div class="timeline" id="timeline"></div>
+          </div>
+
+          <div class="right-col">
+            <div class="card">
+              <div class="card-head"><h2>今日工作方向</h2></div>
+              <div class="dir-list" id="dirList"></div>
+            </div>
+            <div class="card">
+              <div class="card-head">
+                <h2 id="calTitle">日历</h2>
+                <span class="card-hint" id="calHint"></span>
+              </div>
+              <div class="calendar" id="calendar"></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h2>快捷操作</h2></div>
+              <div class="quick-actions">
+                <button class="qa-btn" id="qaRefresh">记录一条</button>
+                <button class="qa-btn" id="qaReport">查看日报</button>
+                <button class="qa-btn" id="qaStats">数据分析</button>
+                <button class="qa-btn" id="qaSettings">系统设置</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 今日记录 ========== -->
+      <section id="view-today" class="view hidden">
+        <div class="card">
+          <div class="card-head">
+            <h2>日报列表</h2>
+            <div class="card-head-actions">
+              <div class="tabs" id="dayTabs">
+                <button class="tab active" data-day="today">今天</button>
+                <button class="tab" data-day="yesterday">昨天</button>
+                <button class="tab" data-day="before">前天</button>
+                <button class="tab" data-day="all">全部</button>
+              </div>
+            </div>
+          </div>
+          <div class="day-list" id="dayList"></div>
+        </div>
+      </section>
+
+      <!-- ========== 日报 ========== -->
+      <section id="view-report" class="view hidden">
+        <div class="card big-card">
+          <div class="card-head">
+            <h2>日报详情</h2>
+            <div class="card-head-actions">
+              <select id="reportDateSelect" class="date-select"></select>
+              <button class="ghost-btn" id="genReportBtn">✨ 生成日报</button>
+              <button class="ghost-btn" id="copyReport">复制</button>
+              <button class="ghost-btn" id="saveReportFeedback">保存修订并学习</button>
+              <span class="save-hint" id="reportFeedbackHint"></span>
+            </div>
+          </div>
+          <div class="report-full" id="reportFull"></div>
+        </div>
+      </section>
+
+      <!-- ========== 周报 ========== -->
+      <section id="view-weekly" class="view hidden">
+        <div class="card big-card">
+          <div class="card-head">
+            <h2>周报汇总</h2>
+            <div class="card-head-actions">
+              <select id="weekSelect" class="date-select"></select>
+              <button class="ghost-btn" id="genWeeklyBtn">✨ 生成周报</button>
+              <button class="ghost-btn" id="copyWeekly">复制</button>
+            </div>
+          </div>
+          <div class="report-full" id="weeklyBody"></div>
+        </div>
+      </section>
+
+      <!-- ========== 数据分析 ========== -->
+      <section id="view-stats" class="view hidden">
+        <div class="stats">
+          <div class="stat-card"><div class="stat-label">总记录数</div><div class="stat-value" id="stTotal">0<span class="stat-unit">条</span></div><div class="stat-foot" id="stTotalFoot">—</div></div>
+          <div class="stat-card"><div class="stat-label">工作天数</div><div class="stat-value" id="stDays">0<span class="stat-unit">天</span></div><div class="stat-foot">有工作记录的天数</div></div>
+          <div class="stat-card"><div class="stat-label">平均时长</div><div class="stat-value" id="stAvg">0<span class="stat-unit">小时/天</span></div><div class="stat-foot">按采集间隔估算</div></div>
+          <div class="stat-card"><div class="stat-label">记录率</div><div class="stat-value" id="stRate">0<span class="stat-unit">%</span></div><div class="stat-foot">有效工作记录占比</div></div>
+        </div>
+        <div class="grid wide">
+          <div class="card">
+            <div class="card-head"><h2>每日记录数量趋势</h2><span class="card-hint">最近 7 天</span></div>
+            <canvas id="trendChart" height="220"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>工作方向分布</h2><span class="card-hint">今日</span></div>
+            <div class="donut-wrap">
+              <div class="donut" id="donut"></div>
+              <div class="donut-legend" id="donutLegend"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 设置 ========== -->
+      <section id="view-settings" class="view hidden">
+        <div class="card big-card">
+          <div class="card-head"><h2>系统设置</h2><span class="card-hint">保存后立即生效</span></div>
+          <div class="settings">
+            <div class="set-group">
+              <h3>采集</h3>
+              <div class="set-row"><label>采集间隔</label>
+                <select id="setInterval">
+                  <option value="1">1 分钟</option>
+                  <option value="2">2 分钟</option>
+                  <option value="3">3 分钟（推荐）</option>
+                  <option value="5">5 分钟</option>
+                  <option value="10">10 分钟</option>
+                  <option value="15">15 分钟</option>
+                  <option value="30">30 分钟</option>
+                </select>
+              </div>
+              <div class="set-row"><label>排除关键词</label>
+                <textarea id="setExclude" rows="2" placeholder="每行一个，命中则不写入汇报（默认已内置影视/游戏/购物等）"></textarea>
+              </div>
+            </div>
+            <div class="set-group">
+              <h3>模型（视觉分析 + 日报生成）</h3>
+              <div class="set-row"><label>接口地址</label><input id="setBase" placeholder="https://api.deepseek.com" /></div>
+              <div class="set-row"><label>模型名称</label><input id="setModel" placeholder="deepseek-v4-flash-vision-exp" /></div>
+              <div class="set-row"><label>API Key</label><input id="setKey" type="password" placeholder="sk-..." /></div>
+            </div>
+            <div class="set-group">
+              <h3>飞书接入</h3>
+              <div class="set-row"><label>部门</label><input id="setDept" placeholder="教学运营" /></div>
+              <div class="set-row"><label>姓名</label><input id="setName" placeholder="韩宗昌" /></div>
+              <div class="set-row"><label>Open ID</label><input id="setOpenId" placeholder="ou_...（个人 ID，群 ID 是 oc_ 开头）" /></div>
+              <div class="set-row"><label>自动推送</label><select id="setAutoPush">
+                <option value="1">开启（每天定时推送）</option>
+                <option value="0">关闭（仅手动推送）</option>
+              </select></div>
+              <div class="set-row"><label>推送时间</label>
+                <select id="setPushHour" class="mini"></select><span class="time-sep">:</span>
+                <select id="setPushMinute" class="mini"></select>
+                <span class="card-hint">到点自动推送当天日报</span>
+              </div>
+              <div class="set-row"><label>知识库文档</label><input id="setDocToken" placeholder="飞书文档 token（日报归档，留空不归档）" /></div>
+              <div class="set-row"><label>归档开关</label><select id="setArchive">
+                <option value="1">开启（每天归档到知识库文档）</option>
+                <option value="0">关闭</option>
+              </select></div>
+            </div>
+            <div class="set-group">
+              <h3>会议纪要自动抓取（业务结论的主要来源）</h3>
+              <div class="set-row"><label>VC 自动抓取</label><select id="setAutoVc">
+                <option value="1">开启（自动抓取当天参与过的会议纪要并融入日报）</option>
+                <option value="0">关闭</option>
+              </select></div>
+              <div class="set-row-col">
+                <label>会议链接（可选，每行一个：妙记 /minutes/ 链接或纪要 docx 链接）</label>
+                <textarea id="setMeetingLinks" rows="2" placeholder="https://gaotuedu.feishu.cn/minutes/obcn..."></textarea>
+              </div>
+              <div class="set-row-col">
+                <label>会议纪要补充（手动兜底，可选）</label>
+                <textarea id="setMeetingNotes" rows="2" placeholder="粘贴会议结论、待办等"></textarea>
+              </div>
+              <div class="set-row"><label></label><button class="ghost-btn" id="previewMeetingBtn">🔍 预览会议文本</button><span class="save-hint" id="meetingHint"></span></div>
+            </div>
+            <div class="set-group">
+              <h3>模板与知识沉淀</h3>
+              <div class="set-row-col"><label>日报模板（大模型按此格式产出）</label><textarea id="setTemplate" rows="6"></textarea></div>
+              <div class="set-row-col"><label>周报模板（周报汇总按此格式产出）</label><textarea id="setWeeklyTemplate" rows="6"></textarea></div>
+              <div class="set-row-col"><label>历史日报/周报参考样本（知识沉淀 · 越用越像你自己写的）</label><textarea id="setReference" rows="5" placeholder="粘贴你手工确认过的日报/周报；生成后在日报页修改并点“保存修订并学习”，会自动追加到最前面"></textarea></div>
+              <div class="set-row"><label></label>
+                <button class="ghost-btn" id="importRecordsBtn">📥 导入 dailylog 历史记录（14 天）</button>
+                <button class="ghost-btn" id="importReportsBtn">📄 导入 dailylog 报告样本</button>
+              </div>
+              <div class="set-row"><label></label><span class="save-hint" id="importHint"></span><span class="card-hint" id="refStats"></span></div>
+            </div>
+            <div class="set-group">
+              <h3>业务工作方向（每行一个）</h3>
+              <textarea id="setDirections" rows="7"></textarea>
+            </div>
+            <div class="settings-actions">
+              <button class="push-btn wide" id="saveBtn">保存设置</button>
+              <span class="save-hint" id="saveHint"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
