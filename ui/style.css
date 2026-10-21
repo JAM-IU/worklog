@@ -91,6 +91,8 @@ body {
 .stat-label { font-size: 12px; color: var(--muted); }
 .stat-value { font-size: 28px; font-weight: 700; margin: 6px 0 2px; background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .stat-value.stat-sm { font-size: 20px; }
+/* 已推送：用绿色实心字，和渐变色的数字区分开 */
+.stat-value.push-ok { background: none; -webkit-text-fill-color: #0d9e6f; color: #0d9e6f; }
 .stat-unit { font-size: 13px; font-weight: 500; margin-left: 3px; }
 .stat-foot { font-size: 12px; color: var(--muted); }
 .stat-foot.up { color: var(--green); }

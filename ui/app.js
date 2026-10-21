@@ -72,7 +72,15 @@ function renderOverviewStats(st) {
   const fdEl = document.getElementById('ovFocusDiff');
   fdEl.textContent = fd === 0 ? '与昨日持平' : (fd > 0 ? `较昨日 +${fd.toFixed(1)}h` : `较昨日 ${fd.toFixed(1)}h`);
   fdEl.className = 'stat-foot ' + (fd > 0 ? 'up' : (fd < 0 ? 'down' : ''));
-  document.getElementById('ovPush').textContent = st.today_count > 0 ? '待推送' : '待记录';
+  // 日报状态：已推送 > 待推送 > 待记录（不能只看记录数，推送完还得显示已推送）
+  const pushEl = document.getElementById('ovPush');
+  if (st.today_pushed) {
+    pushEl.textContent = '已推送';
+    pushEl.className = 'stat-value push-ok';
+  } else {
+    pushEl.textContent = st.today_count > 0 ? '待推送' : '待记录';
+    pushEl.className = 'stat-value';
+  }
   document.getElementById('ovPushTime').textContent = `${p2(settings.feishu_push_hour ?? 18)}:${p2(settings.feishu_push_minute ?? 10)} 自动推送`;
   const d = new Date();
   const wk = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
@@ -500,20 +508,6 @@ function init() {
   });
 
   document.getElementById('saveBtn').addEventListener('click', saveSettings);
-  document.getElementById('importRecordsBtn').addEventListener('click', async () => {
-    const h = document.getElementById('importHint');
-    h.textContent = '导入中…';
-    try { h.textContent = '✅ ' + await invoke('import_dailylog', { days: 14 }); await loadSettings(); }
-    catch (e) { h.textContent = '⚠️ ' + e; }
-    setTimeout(() => (h.textContent = ''), 8000);
-  });
-  document.getElementById('importReportsBtn').addEventListener('click', async () => {
-    const h = document.getElementById('importHint');
-    h.textContent = '导入中…';
-    try { h.textContent = '✅ ' + await invoke('import_dailylog_reports'); await loadSettings(); }
-    catch (e) { h.textContent = '⚠️ ' + e; }
-    setTimeout(() => (h.textContent = ''), 8000);
-  });
   document.getElementById('previewMeetingBtn').addEventListener('click', async () => {
     const h = document.getElementById('meetingHint');
     h.textContent = '读取中…';

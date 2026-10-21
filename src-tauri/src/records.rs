@@ -23,28 +23,37 @@ fn default_true() -> bool { true }
 
 /// 不需要汇报的关键词（设置页可用 exclude_keywords 追加）
 const DEFAULT_EXCLUDE_KEYWORDS: &[&str] = &[
-    "影视", "电影", "电视剧", "综艺", "动漫", "番剧", "影片", "游戏", "王者", "原神",
-    "steam", "epic", "wegame", "购物", "淘宝", "京东", "拼多多", "闲鱼", "天猫",
-    "直播", "小说", "漫画", "娱乐", "微博热搜", "知乎热榜", "抖音", "bilibili", "b站",
-    "斗鱼", "虎牙", "快手",
+    // 影视 / 娱乐
+    "影视", "电影", "电视剧", "纪录片", "综艺", "动漫", "番剧", "影片", "追剧",
+    "短视频", "视频网站", "直播", "小说", "漫画", "娱乐", "游戏", "王者", "原神",
+    "steam", "epic", "wegame", "斗鱼", "虎牙", "快手", "抖音", "bilibili", "b站",
+    // 电商 / 生活
+    "购物", "淘宝", "京东", "拼多多", "闲鱼", "天猫", "外卖", "买菜", "点餐",
+    // 资讯消遣
+    "微博热搜", "知乎热榜", "热搜", "八卦",
 ];
 
-/// 判断记录是否值得入库：reportable 为 true，且不命中排除关键词
-pub fn is_reportable(rec: &Record) -> bool {
+/// 判断记录是否值得入库：reportable 为 true，且不命中排除关键词。
+/// 传入 settings 快照，避免逐条记录重复读配置文件。
+pub fn is_reportable_with(rec: &Record, s: &config::Settings) -> bool {
     if !rec.reportable {
         return false;
     }
     let hay = format!("{} {} {}", rec.summary, rec.detail, rec.apps.join(" "));
-    let s = config::load_settings();
-    let mut keywords: Vec<String> = DEFAULT_EXCLUDE_KEYWORDS.iter().map(|k| k.to_string()).collect();
-    for line in s.exclude_keywords.lines() {
-        let k = line.trim();
-        if !k.is_empty() {
-            keywords.push(k.to_lowercase());
-        }
-    }
     let hay_l = hay.to_lowercase();
-    !keywords.iter().any(|k| hay_l.contains(k.as_str()))
+    if DEFAULT_EXCLUDE_KEYWORDS.iter().any(|k| hay_l.contains(k)) {
+        return false;
+    }
+    s.exclude_keywords
+        .lines()
+        .map(|l| l.trim().to_lowercase())
+        .filter(|k| !k.is_empty())
+        .any(|k| hay_l.contains(&k))
+        == false
+}
+
+pub fn is_reportable(rec: &Record) -> bool {
+    is_reportable_with(rec, &config::load_settings())
 }
 
 pub fn append_if_reportable(rec: &Record, date: &str) -> bool {

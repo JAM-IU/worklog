@@ -64,7 +64,10 @@ pub fn run_lark_json(args: &[&str]) -> Result<Value, String> {
     Ok(v)
 }
 
-fn check_posted(date: &str) -> Result<bool, String> {
+/// 查询某个日期已由 worklog 写入的行，返回 (record_id, 该行是否已有日报正文)。
+/// 注意：lark-cli 1.0.9x 的 record-list 返回的是 data.record_id_list / data.data，
+/// 老版本才是 records_count / total——两种都兼容，否则会「永远查不到」并重复建行。
+fn posted_record(date: &str) -> Result<Option<(String, bool)>, String> {
     let filter = json!({
         "logic": "and",
         "conditions": [
@@ -81,14 +84,36 @@ fn check_posted(date: &str) -> Result<bool, String> {
         "--format", "json",
         "--filter-json", &filter,
     ])?;
-    for key in ["records_count", "total"] {
-        if let Some(n) = v["data"][key].as_u64() {
-            if n > 0 {
-                return Ok(true);
+    let d = &v["data"];
+    if let Some(ids) = d["record_id_list"].as_array() {
+        let Some(first) = ids.first().and_then(|x| x.as_str()) else {
+            return Ok(None);
+        };
+        let mut has_report = false;
+        if let Some(ci) = d["fields"]
+            .as_array()
+            .and_then(|f| f.iter().position(|x| x.as_str() == Some("AI生成日报")))
+        {
+            if let Some(row) = d["data"].as_array().and_then(|a| a.first()).and_then(|r| r.as_array()) {
+                has_report = match row.get(ci) {
+                    Some(serde_json::Value::String(s)) => !s.trim().is_empty(),
+                    Some(serde_json::Value::Null) | None => false,
+                    Some(_) => true,
+                };
             }
         }
+        return Ok(Some((first.to_string(), has_report)));
     }
-    Ok(false)
+    // 兼容旧版 CLI 的计数式返回
+    for key in ["records_count", "total"] {
+        if let Some(n) = d[key].as_u64() {
+            if n > 0 {
+                return Ok(Some((String::new(), true)));
+            }
+            return Ok(None);
+        }
+    }
+    Ok(None)
 }
 
 pub fn push(date: &str, force: bool) -> PushResult {
@@ -96,7 +121,10 @@ pub fn push(date: &str, force: bool) -> PushResult {
     if !s.feishu_enabled {
         return PushResult { ok: false, reason: "feishu_enabled=false".into(), record_ids: String::new(), digest_chars: 0, note: String::new() };
     }
-    let from = config::report_window_start_ts();
+    // 推送取数窗口 = 这一天的跨日窗口起点（昨天推送时刻）。
+    // 不要用「上次推送时刻」：当天推送过之后再重推会只剩推送之后的十几分钟，内容大面积丢失。
+    let from = config::historical_window(date).0;
+    let from = if from.is_empty() { config::report_window_start_ts() } else { from };
     let digest = records::build_digest_window(&from);
     if digest.is_empty() {
         return PushResult { ok: false, reason: "no_work_records".into(), record_ids: String::new(), digest_chars: 0, note: String::new() };
@@ -112,15 +140,16 @@ pub fn push(date: &str, force: bool) -> PushResult {
             payload_text.push_str(&mt);
         }
     }
-    if !force {
-        match check_posted(date) {
-            Ok(true) => {
-                return PushResult { ok: false, reason: "already_posted".into(), record_ids: String::new(), digest_chars: digest.chars().count(), note: String::new() };
-            }
-            Ok(false) => {}
-            Err(e) => {
-                return PushResult { ok: false, reason: e, record_ids: String::new(), digest_chars: digest.chars().count(), note: String::new() };
-            }
+    // 已存在今天的行时：有正文就不再重复推送；没有正文（上次生成失败）则补写同一行，绝不新建第二行。
+    let existing = match posted_record(date) {
+        Ok(x) => x,
+        Err(e) => {
+            return PushResult { ok: false, reason: e, record_ids: String::new(), digest_chars: digest.chars().count(), note: String::new() };
+        }
+    };
+    if let Some((_, has_report)) = &existing {
+        if !force && *has_report {
+            return PushResult { ok: false, reason: "already_posted".into(), record_ids: String::new(), digest_chars: digest.chars().count(), note: String::new() };
         }
     }
     // 本地生成日报（带个人模板 + 知识沉淀样本），飞书侧直接归档展示
@@ -151,25 +180,53 @@ pub fn push(date: &str, force: bool) -> PushResult {
     if s.feishu_user_open_id.starts_with("ou_") && !s.feishu_user_name.is_empty() {
         record.insert("姓名".into(), json!([{"id": s.feishu_user_open_id, "name": s.feishu_user_name}]));
     }
-    let payload = json!({ "create_records": [record] });
+    // 有已存在的行就更新那一行（record-upsert + --record-id），否则新建。
+    // 这样同一天只会有 1 行：重复推送 = 覆盖刷新，不会堆出多行。
+    let existing_id = existing.as_ref().and_then(|(id, _)| {
+        if id.is_empty() { None } else { Some(id.clone()) }
+    });
+    let (payload, mut lark_args) = match &existing_id {
+        Some(rid) => (
+            serde_json::Value::Object(record.clone()),
+            vec![
+                "base".to_string(), "+record-upsert".to_string(), "--as".to_string(), "user".to_string(),
+                "--base-token".to_string(), s.feishu_base_token.clone(),
+                "--table-id".to_string(), s.feishu_table_id.clone(),
+                "--record-id".to_string(), rid.clone(),
+            ],
+        ),
+        None => (
+            json!({ "create_records": [record] }),
+            vec![
+                "base".to_string(), "+record-batch-create".to_string(), "--as".to_string(), "user".to_string(),
+                "--base-token".to_string(), s.feishu_base_token.clone(),
+                "--table-id".to_string(), s.feishu_table_id.clone(),
+            ],
+        ),
+    };
     let tmp = std::env::temp_dir().join(format!("worklog_push_{}.json", chrono::Local::now().format("%H%M%S%3f")));
     if let Err(e) = std::fs::write(&tmp, payload.to_string()) {
         return PushResult { ok: false, reason: format!("写临时文件失败: {e}"), record_ids: String::new(), digest_chars: 0, note: String::new() };
     }
     let arg = format!("@{}", tmp.display());
-    let result = run_lark(&[
-        "base", "+record-batch-create", "--as", "user",
-        "--base-token", &s.feishu_base_token,
-        "--table-id", &s.feishu_table_id,
-        "--json", &arg,
-    ]);
+    lark_args.push("--json".to_string());
+    lark_args.push(arg);
+    let args_ref: Vec<&str> = lark_args.iter().map(|x| x.as_str()).collect();
+    let result = run_lark(&args_ref);
     let _ = std::fs::remove_file(&tmp);
+    if existing_id.is_some() && !note.is_empty() { note.push_str(" | updated"); }
+    else if existing_id.is_some() { note.push_str("updated"); }
     match result {
         Ok(v) => {
             // 记录本次推送时刻（跨日窗口去重的锚点）
             config::mark_pushed(&chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string());
             // 归档到飞书知识库文档（每天一段，长期沉淀）
-            if s.knowledge_archive_enabled && !s.knowledge_doc_token.trim().is_empty() && !report.trim().is_empty() {
+            // 同一日期已归档过就跳过，避免重复推送把知识库写成重复段落。
+            if s.knowledge_archive_enabled
+                && !s.knowledge_doc_token.trim().is_empty()
+                && !report.trim().is_empty()
+                && !doc_has_date(&s, date)
+            {
                 match archive_to_doc(&s, date, &report, &digest) {
                     Ok(_) => {
                         config::log_line(&format!("知识库归档成功：{date}"));
@@ -195,6 +252,23 @@ pub fn push(date: &str, force: bool) -> PushResult {
             }
         }
         Err(e) => PushResult { ok: false, reason: e, record_ids: String::new(), digest_chars: 0, note },
+    }
+}
+
+/// 知识库文档里是否已经存在该日期的归档段落（去重，避免重复推送写成多段）
+fn doc_has_date(s: &config::Settings, date: &str) -> bool {
+    let token = s.knowledge_doc_token.trim();
+    if token.is_empty() {
+        return false;
+    }
+    match run_lark(&[
+        "docs", "+fetch", "--as", "user",
+        "--doc", token,
+        "--doc-format", "markdown",
+    ]) {
+        Ok(v) => v["data"].to_string().contains(&format!("{date} 日报")),
+        // 读不到就当作没归档：宁可多归档一次，也不要丢当天日报
+        Err(_) => false,
     }
 }
 

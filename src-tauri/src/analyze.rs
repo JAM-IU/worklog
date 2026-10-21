@@ -80,13 +80,35 @@ fn build_body(s: &config::Settings, messages: serde_json::Value, max_tokens: u32
 }
 
 fn chat(s: &config::Settings, body: serde_json::Value, label: &str) -> Result<String, String> {
-    let client = reqwest::blocking::Client::new();
-    let resp = client
-        .post(format!("{}/chat/completions", s.model_base_url.trim_end_matches('/')))
-        .bearer_auth(s.model_api_key.trim())
-        .json(&body)
-        .send()
-        .map_err(|e| format!("{label}请求失败: {e}"))?;
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(180))
+        .build()
+        .map_err(|e| format!("{label}创建客户端失败: {e}"))?;
+    let url = format!("{}/chat/completions", s.model_base_url.trim_end_matches('/'));
+    // 网络抖动重试：偶发 "error sending request" 不该让整篇日报丢掉
+    let mut last_err = String::new();
+    let mut resp_opt = None;
+    for attempt in 1..=3 {
+        match client
+            .post(&url)
+            .bearer_auth(s.model_api_key.trim())
+            .json(&body)
+            .send()
+        {
+            Ok(r) => {
+                resp_opt = Some(r);
+                break;
+            }
+            Err(e) => {
+                last_err = format!("{label}请求失败（第 {attempt} 次）: {e}");
+                config::log_line(&last_err);
+                if attempt < 3 {
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                }
+            }
+        }
+    }
+    let resp = resp_opt.ok_or(last_err)?;
     if !resp.status().is_success() {
         return Err(format!("{label}模型返回 {}: {}", resp.status(), resp.text().unwrap_or_default()));
     }
@@ -142,14 +164,16 @@ pub fn preview_report(date: &str) -> Result<String, String> {
     generate_report_for(date)
 }
 
-/// 生成指定日期的日报（今天用跨日窗口；历史日期用对应日期的推送窗口），生成后落盘缓存
+/// 生成指定日期的日报（每一天都用统一的跨日窗口），生成后落盘缓存
 pub fn generate_report_for(date: &str) -> Result<String, String> {
     let now = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
-    let (from, to) = if date == crate::records::today_str() {
-        (config::report_window_start_ts(), now)
-    } else {
-        config::historical_window(date)
-    };
+    // 每一天都用同一套「跨日窗口」定义：[(D-1) 推送时刻, D 推送时刻)。
+    // 今天再把结束时间收口到「现在」之前：
+    //   · 到点推送前 → 到今天此刻为止，日报随工作实时增长；
+    //   · 到点推送后 → 今天完整一整天，不会因为「已推送」而只剩推送之后的十几分钟。
+    // 推送之后新产生的记录自然落进明天的窗口，既不丢也不重复。
+    let (from, day_end) = config::historical_window(date);
+    let to = if date == crate::records::today_str() && now < day_end { now } else { day_end };
     if from.is_empty() {
         return Err(format!("无效日期: {date}"));
     }
@@ -245,13 +269,14 @@ pub fn generate_weekly_report(week_start: &str) -> Result<String, String> {
 
     let prompt = format!(
         "你是帮本人整理周报的同事。本周为 {week_start} ~ {week_end}。请根据本周工作轨迹与每日日报，写一份简短、像本人同步的周报。\n\n\
-         【基本要求】\n1) 按项目/主题合并重复记录，不按时间段罗列；严格按模板组织“业务侧可使用的能力 / 本周验证 / 其他完成事项 / 推进中与遗留问题 / 下周计划 / 需要协调”；\
+         【基本要求】\n1) 按项目/主题合并重复记录，不按时间段罗列；以“项目/能力分组 + 下周工作计划表”为主，严格按模板组织，不要为了凑完整而强行增加验证、遗留问题或需要协调章节；\
          2) 只写有事实依据的内容：没有数据不写指标，没有卡点不凑风险，没有下周安排不编建议；\
          3) 严格区分已完成、进行中和待确认，不把计划写成结果；禁止编造；\
          4) 没有内容的模板章节直接删除，不输出\"暂无\"、\"无\"、\"待补充\"；\
          5) 完成事项最多 6 条，推进事项最多 4 条，下周计划最多 3 条；\
          6) 少用形容词和\"赋能\"、\"闭环\"、\"抓手\"、\"夯实\"等套话；不写时间分布、应用时长、空指标表或泛泛建议；\
-         7) 直接输出周报正文，不要写作过程或元评论。{ctx}\n\n{weekly_source}"
+         7) 每个项目标题先写项目名，再用一句话说明本周进展和当前状态；项目内优先保留 2-4 条事实，完成事项、问题和下一步合并写；下周计划最多 4 条，使用优先级/动作/预期产出表格；\
+         8) 直接输出周报正文，不要写作过程或元评论。{ctx}\n\n{weekly_source}"
     );
     let body = build_body(&s, json!([{"role": "user", "content": prompt}]), 4096, 0.7);
     let content = chat(&s, body, "周报生成")?;

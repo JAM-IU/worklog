@@ -82,6 +82,15 @@ pub fn overview() -> serde_json::Value {
         0.0
     };
 
+    // 今日是否已经推送过：last_push.json 记录的日期是不是今天
+    let last_push_ts = std::fs::read_to_string(config::data_dir().join("last_push.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|v| v.get("ts").and_then(|x| x.as_str()).map(String::from))
+        .unwrap_or_default();
+    let today_pushed = last_push_ts.starts_with(&today);
+    let has_report_today = config::load_report(&today).is_some();
+
     json!({
         "today_count": today_count,
         "yesterday_count": yesterday_count,
@@ -92,6 +101,8 @@ pub fn overview() -> serde_json::Value {
         "work_days": work_days,
         "avg_hours": (avg_hours * 10.0).round() / 10.0,
         "record_rate": record_rate.round() as i64,
+        "today_pushed": today_pushed,
+        "has_report_today": has_report_today,
         "daily_counts": daily_counts,
         "distribution": distribution,
         "interval_minutes": interval as u32,
