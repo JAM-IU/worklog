@@ -355,6 +355,7 @@ async function loadSettings() {
   document.getElementById('setAutoPush').value = s.feishu_auto_push_enabled ? '1' : '0';
   document.getElementById('setPushHour').value = String(s.feishu_push_hour ?? 18);
   document.getElementById('setPushMinute').value = String(s.feishu_push_minute ?? 10);
+  renderWeekdayPicker(s.daily_push_weekdays || [3, 4, 5, 6, 7]);
   document.getElementById('setDocToken').value = s.knowledge_doc_token || '';
   document.getElementById('setArchive').value = s.knowledge_archive_enabled ? '1' : '0';
   document.getElementById('setAutoVc').value = s.meeting_auto_vc ? '1' : '0';
@@ -375,6 +376,18 @@ async function refreshRefStats() {
   } catch (e) { /* ignore */ }
 }
 
+/* 日报推送日勾选（1=周一 … 7=周日），供各团队自定义工作日程 */
+const WEEKDAY_NAMES = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+function renderWeekdayPicker(days) {
+  const box = document.getElementById('setPushWeekdays');
+  if (!box) return;
+  box.innerHTML = WEEKDAY_NAMES.map((name, i) => {
+    const n = i + 1;
+    const on = days.includes(n);
+    return `<label class="weekday-chip${on ? ' on' : ''}"><input type="checkbox" value="${n}"${on ? ' checked' : ''}>${name}</label>`;
+  }).join('');
+}
+
 async function saveSettings() {
   const hint = document.getElementById('saveHint');
   try {
@@ -390,6 +403,8 @@ async function saveSettings() {
     s.feishu_auto_push_enabled = document.getElementById('setAutoPush').value === '1';
     s.feishu_push_hour = Number(document.getElementById('setPushHour').value);
     s.feishu_push_minute = Number(document.getElementById('setPushMinute').value);
+    s.daily_push_weekdays = [...document.querySelectorAll('#setPushWeekdays input:checked')]
+      .map(el => Number(el.value)).sort((a, b) => a - b);
     s.knowledge_doc_token = document.getElementById('setDocToken').value.trim();
     s.knowledge_archive_enabled = document.getElementById('setArchive').value === '1';
     s.meeting_auto_vc = document.getElementById('setAutoVc').value === '1';

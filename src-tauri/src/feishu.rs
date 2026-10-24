@@ -121,10 +121,13 @@ pub fn push(date: &str, force: bool) -> PushResult {
     if !s.feishu_enabled {
         return PushResult { ok: false, reason: "feishu_enabled=false".into(), record_ids: String::new(), digest_chars: 0, note: String::new() };
     }
-    // 推送取数窗口 = 这一天的跨日窗口起点（昨天推送时刻）。
-    // 不要用「上次推送时刻」：当天推送过之后再重推会只剩推送之后的十几分钟，内容大面积丢失。
-    let from = config::historical_window(date).0;
-    let from = if from.is_empty() { config::report_window_start_ts() } else { from };
+    // 推送取数窗口：今天用 day_window_start（覆盖周一/周二休息日空档，重推也看全天），
+    // 历史日期用该日期的固定跨日窗口。
+    let from = if date == crate::records::today_str() {
+        config::day_window_start()
+    } else {
+        config::historical_window(date).0
+    };
     let digest = records::build_digest_window(&from);
     if digest.is_empty() {
         return PushResult { ok: false, reason: "no_work_records".into(), record_ids: String::new(), digest_chars: 0, note: String::new() };

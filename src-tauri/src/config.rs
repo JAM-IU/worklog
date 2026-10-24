@@ -1,3 +1,4 @@
+use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -42,6 +43,10 @@ pub struct Settings {
     pub feishu_push_hour: u32,
     #[serde(default = "d_minute")]
     pub feishu_push_minute: u32,
+    /// 日报自动推送的星期几（1=周一 … 7=周日）。
+    /// 默认周三~周日：周一/周二休息不推送；周日这一行只入表、不单独提醒，供当晚周报聚合。
+    #[serde(default = "d_push_weekdays")]
+    pub daily_push_weekdays: Vec<u32>,
     /// 是否由 WorkLog 本地生成日报（带个人模板+知识沉淀），推送时直接带上
     #[serde(default = "d_true")]
     pub local_report_enabled: bool,
@@ -73,9 +78,10 @@ fn d_base_url() -> String { "https://api.deepseek.com".into() }
 fn d_model() -> String { "deepseek-v4-flash-vision-exp".into() }
 fn d_token() -> String { "OIYSbZpouay8umsfte9c7KyBnye".into() }
 fn d_table() -> String { "tbl0i1AAknL19gT8".into() }
-fn d_dept() -> String { "教学运营".into() }
+fn d_dept() -> String { "转化".into() }
 fn d_hour() -> u32 { 18 }
 fn d_minute() -> u32 { 10 }
+fn d_push_weekdays() -> Vec<u32> { vec![3, 4, 5, 6, 7] }
 fn default_work_directions() -> Vec<String> {
     vec![
         "首联五轮沟通与质量监测（字段口径、用户分层、评分、看板）".into(),
@@ -150,12 +156,13 @@ impl Default for Settings {
             feishu_enabled: true,
             feishu_base_token: "OIYSbZpouay8umsfte9c7KyBnye".into(),
             feishu_table_id: "tbl0i1AAknL19gT8".into(),
-            feishu_dept: "教学运营".into(),
+            feishu_dept: "转化".into(),
             feishu_user_name: String::new(),
             feishu_user_open_id: String::new(),
             feishu_auto_push_enabled: true,
             feishu_push_hour: 18,
             feishu_push_minute: 10,
+            daily_push_weekdays: vec![3, 4, 5, 6, 7],
             local_report_enabled: true,
             knowledge_doc_token: String::new(),
             knowledge_archive_enabled: true,
@@ -191,10 +198,12 @@ pub fn settings_path() -> PathBuf {
     data_dir().join("settings.json")
 }
 
-/// 日报跨日窗口起点：
-/// - 今天还没推送过 → 昨天推送时刻（跨日窗口，深夜工作并入今日日报）
-/// - 今天已推送过 → 上次推送时刻（只补新增记录，不重复统计）
-pub fn report_window_start_ts() -> String {
+/// 当天取数起点（日报生成与推送共用）：
+/// - 上次推送不是今天 → 用上次推送时刻。这样周一/周二休息日没推送时，
+///   周三的日报会把周末以来的工作一起带上，不会漏；
+/// - 上次推送就是今天 → 用昨天推送时刻，重推/预览都看完整一天，
+///   而不是只剩推送之后的十几分钟。
+pub fn day_window_start() -> String {
     let s = load_settings();
     let now = chrono::Local::now();
     let today = now.format("%Y-%m-%d").to_string();
@@ -202,7 +211,7 @@ pub fn report_window_start_ts() -> String {
     if let Ok(text) = std::fs::read_to_string(&file) {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
             if let Some(ts) = v.get("ts").and_then(|x| x.as_str()) {
-                if ts.starts_with(&today) {
+                if !ts.starts_with(&today) {
                     return ts.to_string();
                 }
             }
@@ -212,6 +221,13 @@ pub fn report_window_start_ts() -> String {
         .format("%Y-%m-%d")
         .to_string();
     format!("{yesterday}T{:02}:{:02}:00", s.feishu_push_hour, s.feishu_push_minute)
+}
+
+/// 工作周锚点：所属周期的周三（工作周期 = 周三 ~ 周日，周一周二休息）
+pub fn week_start_wednesday(anchor: chrono::NaiveDate) -> chrono::NaiveDate {
+    let wd = anchor.weekday().number_from_monday(); // 1=周一 … 7=周日
+    let back = if wd >= 3 { wd - 3 } else { wd + 4 };
+    anchor - chrono::Duration::days(back as i64)
 }
 
 /// 记录上次成功推送时刻（供跨日窗口去重）

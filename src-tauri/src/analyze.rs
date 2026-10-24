@@ -167,13 +167,14 @@ pub fn preview_report(date: &str) -> Result<String, String> {
 /// 生成指定日期的日报（每一天都用统一的跨日窗口），生成后落盘缓存
 pub fn generate_report_for(date: &str) -> Result<String, String> {
     let now = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
-    // 每一天都用同一套「跨日窗口」定义：[(D-1) 推送时刻, D 推送时刻)。
-    // 今天再把结束时间收口到「现在」之前：
-    //   · 到点推送前 → 到今天此刻为止，日报随工作实时增长；
-    //   · 到点推送后 → 今天完整一整天，不会因为「已推送」而只剩推送之后的十几分钟。
-    // 推送之后新产生的记录自然落进明天的窗口，既不丢也不重复。
-    let (from, day_end) = config::historical_window(date);
-    let to = if date == crate::records::today_str() && now < day_end { now } else { day_end };
+    // 每天固定一个「跨日窗口」[(D-1) 推送时刻, D 推送时刻)，今天再收口到 min(现在, 今日推送时刻)。
+    // 今天的起点用 day_window_start()：上次推送不是今天时，从上次推送时刻起算——
+    // 周一/周二休息日没推送，周三的日报会把空档一起带上；
+    // 上次推送就是今天时，回到昨天推送时刻，重推/预览都看完整一天。
+    let is_today = date == crate::records::today_str();
+    let (day_from, day_end) = config::historical_window(date);
+    let from = if is_today { config::day_window_start() } else { day_from };
+    let to = if is_today && now < day_end { now } else { day_end };
     if from.is_empty() {
         return Err(format!("无效日期: {date}"));
     }

@@ -34,8 +34,8 @@ fn cli_main() -> Result<(), String> {
             .and_then(|i| args.get(i + 1).cloned())
             .unwrap_or_else(|| {
                 let d = chrono::Local::now().date_naive();
-                let wd = d.weekday().num_days_from_monday();
-                (d - chrono::Duration::days(wd as i64)).format("%Y-%m-%d").to_string()
+                // 工作周期 = 周三 ~ 周日，周报按所属周期的周三取整
+                config::week_start_wednesday(d).format("%Y-%m-%d").to_string()
             });
         match analyze::generate_weekly_report(&week) {
             Ok(text) => println!("{text}"),
@@ -234,8 +234,8 @@ fn week_list() -> Vec<serde_json::Value> {
         .iter()
         .filter_map(|d| {
             chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok().map(|nd| {
-                let wd = nd.weekday().num_days_from_monday();
-                (nd - chrono::Duration::days(wd as i64))
+                // 工作周期 = 周三 ~ 周日：按所属周期的周三做锚点分组
+                config::week_start_wednesday(nd)
                     .format("%Y-%m-%d")
                     .to_string()
             })
@@ -267,6 +267,11 @@ fn start_push_scheduler(app: tauri::AppHandle) {
         }
         let now = chrono::Local::now();
         let today = now.format("%Y-%m-%d").to_string();
+        // 只在配置的「日报推送日」触发（1=周一 … 7=周日；默认周三~周日，周一周二休息）
+        let weekday = now.weekday().number_from_monday();
+        if !s.daily_push_weekdays.contains(&weekday) {
+            continue;
+        }
         let due = now.format("%H:%M").to_string()
             >= format!("{:02}:{:02}", s.feishu_push_hour, s.feishu_push_minute);
         if !due {

@@ -242,6 +242,10 @@
                 <select id="setPushMinute" class="mini"></select>
                 <span class="card-hint">到点自动推送当天日报</span>
               </div>
+              <div class="set-row"><label>日报推送日</label>
+                <div class="weekday-picker" id="setPushWeekdays"></div>
+              </div>
+              <div class="set-row"><label></label><span class="card-hint">默认周三~周日（周一周二休息）；周日推送只入表、不单独提醒，供当晚周报聚合。周报发送时间在飞书多维表格的「周报生成-转化」工作流里设置。</span></div>
               <div class="set-row"><label>知识库文档</label><input id="setDocToken" placeholder="飞书文档 token（日报归档，留空不归档）" /></div>
               <div class="set-row"><label>归档开关</label><select id="setArchive">
                 <option value="1">开启（每天归档到知识库文档）</option>
