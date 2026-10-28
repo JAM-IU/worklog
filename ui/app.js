@@ -252,6 +252,7 @@ async function loadWeekly(weekStart, regenerate) {
 
 /* ============ 数据分析 ============ */
 async function refreshStats() {
+  const box = document.getElementById('statsView');
   try {
     const st = await invoke('stats_overview');
     document.getElementById('stTotal').innerHTML = `${st.total_records}<span class="stat-unit">条</span>`;
@@ -259,9 +260,23 @@ async function refreshStats() {
     document.getElementById('stDays').innerHTML = `${st.work_days}<span class="stat-unit">天</span>`;
     document.getElementById('stAvg').innerHTML = `${st.avg_hours}<span class="stat-unit">小时/天</span>`;
     document.getElementById('stRate').innerHTML = `${st.record_rate}<span class="stat-unit">%</span>`;
+    const trend = document.getElementById('trendChart');
+    if (!st.daily_counts || !st.daily_counts.length || st.total_records === 0) {
+      trend.style.display = 'none';
+      document.getElementById('trendEmpty').classList.remove('hidden');
+    } else {
+      trend.style.display = '';
+      document.getElementById('trendEmpty').classList.add('hidden');
+    }
     drawTrend(st.daily_counts || []);
     drawDonut(st.distribution || []);
-  } catch (e) { /* ignore */ }
+  } catch (e) {
+    // 后端出错时把错误显示出来，而不是静默留白，便于排查
+    document.getElementById('trendChart').style.display = 'none';
+    const empty = document.getElementById('trendEmpty');
+    empty.classList.remove('hidden');
+    empty.textContent = '数据分析加载失败：' + String(e);
+  }
 }
 
 function drawTrend(data) {
@@ -434,8 +449,9 @@ async function pushNow(force) {
   btn.innerHTML = '推送中…';
   try {
     const r = await invoke('push_now', { force: !!force });
-    if (r.ok) {
-      btn.innerHTML = '✅ 已推送到飞书';
+    // already_posted 表示今天已经推过（内容完整），也按成功展示，不再弹「推送失败」
+    if (r.ok || r.reason === 'already_posted') {
+      btn.innerHTML = r.ok ? '✅ 已推送到飞书' : '✅ 今天已推送';
       const pill = document.getElementById('pillPush');
       pill.textContent = '飞书：已推送';
       pill.className = 'pill ok';

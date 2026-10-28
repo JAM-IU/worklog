@@ -27,6 +27,11 @@ static LAST_AUTO_PUSH: Mutex<Option<String>> = Mutex::new(None);
 // ---------- CLI 模式：--push 无窗口推送 / --import-dailylog 迁移历史 ----------
 fn cli_main() -> Result<(), String> {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--stats") {
+        println!("{}", serde_json::to_string_pretty(&stats::overview()).unwrap_or_default());
+        println!("day_list: {}", serde_json::to_string_pretty(&stats::day_list()).unwrap_or_default());
+        std::process::exit(0);
+    }
     if args.iter().any(|a| a == "--weekly-report") {
         let week = args
             .iter()
