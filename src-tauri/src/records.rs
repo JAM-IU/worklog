@@ -240,6 +240,21 @@ fn digest_from_items(items: &[&Record]) -> String {
         }
         lines.push(seg);
     }
-    let digest = lines.join("\n");
-    digest.chars().take(2000).collect()
+    // 限长时保留「最新」的记录（尾部），而不是最旧的前 2000 字——
+    // 否则跨多日的窗口会整段丢掉今天下午/晚上的工作，日报对不上当天记录。
+    let header = lines.remove(0);
+    let mut kept: Vec<String> = Vec::new();
+    let mut len = 0usize;
+    for seg in lines.iter().rev() {
+        let n = seg.chars().count() + 1;
+        if !kept.is_empty() && len + n > 2000 {
+            break;
+        }
+        kept.push(seg.clone());
+        len += n;
+    }
+    kept.reverse();
+    let mut out = vec![header];
+    out.extend(kept);
+    out.join("\n")
 }
