@@ -252,7 +252,8 @@ fn week_list() -> Vec<serde_json::Value> {
         .into_iter()
         .map(|ws| {
             let d = chrono::NaiveDate::parse_from_str(&ws, "%Y-%m-%d").unwrap();
-            let we = d + chrono::Duration::days(6);
+            // 工作周期 = 周三 ~ 周日（5 天）
+            let we = d + chrono::Duration::days(4);
             serde_json::json!({
                 "start": ws,
                 "end": we.format("%Y-%m-%d").to_string(),

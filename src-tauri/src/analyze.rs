@@ -212,11 +212,12 @@ pub fn generate_report_for(date: &str) -> Result<String, String> {
     Ok(content)
 }
 
-/// 生成周报：聚合指定周（周一起 7 天）的工作轨迹与已生成的每日日报，按周报模板产出
+/// 生成周报：聚合指定工作周期（周三 ~ 周日，共 5 天）的工作轨迹与已生成的每日日报，按周报模板产出
 pub fn generate_weekly_report(week_start: &str) -> Result<String, String> {
     let d = chrono::NaiveDate::parse_from_str(week_start, "%Y-%m-%d")
         .map_err(|_| format!("无效周起始日: {week_start}"))?;
-    let week_end = d + chrono::Duration::days(6);
+    // 工作周期 = 周三至周日（周一周二休息）：只聚合 5 天，不把休息日和未来日期算进来
+    let week_end = d + chrono::Duration::days(4);
     // 本周已生成的每日日报（作为聚合输入，保留每天的成果提炼）
     let mut daily_block = String::new();
     let mut covered_dates = std::collections::HashSet::new();
