@@ -136,39 +136,6 @@ pub fn is_work(rec: &Record) -> bool {
     !ENTERTAINMENT_KEYWORDS.iter().any(|k| hay.contains(k))
 }
 
-/// 当天工作记录 → 成果导向摘要（推送到飞书「日报记录」表的原始输入）
-pub fn build_digest(date: &str) -> String {
-    let day = read_day(date);
-    let items: Vec<&Record> = day
-        .iter()
-        .filter(|r| is_work(r) && !r.summary.trim().is_empty() && r.summary != "无工作活动")
-        .collect();
-    digest_from_items(&items)
-}
-
-/// 跨日窗口摘要：从 from_ts（如昨天推送时刻）到现在的记录合并，
-/// 解决"深夜工作跨到第二天"被丢进前一日日报的问题。
-pub fn build_digest_window(from_ts: &str) -> String {
-    let now = Local::now();
-    let today = now.format("%Y-%m-%d").to_string();
-    let yesterday = (now.date_naive() - chrono::Duration::days(1))
-        .format("%Y-%m-%d")
-        .to_string();
-    let mut all = read_day(&yesterday);
-    all.extend(read_day(&today));
-    all.sort_by(|a, b| a.ts.cmp(&b.ts));
-    let items: Vec<&Record> = all
-        .iter()
-        .filter(|r| {
-            r.ts.as_str() >= from_ts
-                && is_work(r)
-                && !r.summary.trim().is_empty()
-                && r.summary != "无工作活动"
-        })
-        .collect();
-    digest_from_items(&items)
-}
-
 /// 指定日期区间的摘要（历史日报回溯用）：[from_ts, to_ts)
 pub fn build_digest_range(from_ts: &str, to_ts: &str) -> String {
     let now = Local::now();

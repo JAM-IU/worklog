@@ -84,6 +84,7 @@ fn d_minute() -> u32 { 10 }
 fn d_push_weekdays() -> Vec<u32> { vec![3, 4, 5, 6, 7] }
 fn default_work_directions() -> Vec<String> {
     vec![
+        "团队技术赋能与工具提效（工具/配置上线、需求提交与排期跟进、上线验收、答疑支持、培训）".into(),
         "首联五轮沟通与质量监测（字段口径、用户分层、评分、看板）".into(),
         "销冠智能体与用户画像（实时指导、组织架构、业务上线）".into(),
         "growAI与21天回捞（往期托管、标签分层、自动追单）".into(),
@@ -103,16 +104,15 @@ fn d_weekly_template() -> String { DEFAULT_WEEKLY_TEMPLATE.to_string() }
 pub const DEFAULT_REPORT_TEMPLATE: &str = r#"📋 日报（日期）
 
 ## 今日核心成果
-### 成果一：项目/事项
-- **目标**：今天要推进什么（只有确实有目标时写）
-- **结果**：做了什么、产出什么、得到什么结论
-- **价值**：只有能说明实际影响时写，避免拔高
+### 成果一：主题（工具上线 / 需求推进 / 上线验收 / 答疑支持 / 业务动作）
+- **做了什么**：面向团队或业务的具体动作与结果（工具/配置上线给谁用、需求提给谁、排期推进到哪一步、上线后解决了什么问题）
+- **价值**：对团队提效或业务推进的实际影响
 
-### 成果二：项目/事项
-- **结果**：具体进展或产出
+### 成果二：主题
+- **做了什么**：具体结果
 
 ## 推进中的重点事项
-- **事项**：当前进度；下一步动作；等待谁确认时直接写清楚
+- **事项**：当前状态 → 卡点 → 下一步；等待谁时直接点名
 
 ## 明日计划
 1. 具体动作
@@ -122,24 +122,28 @@ pub const DEFAULT_REPORT_TEMPLATE: &str = r#"📋 日报（日期）
 ## 需要协调
 - 只写确实需要他人、数据、权限或排期配合的事项。
 
-要求：按项目合并重复记录；一件事只出现一次；优先写业务结果、明确结论和真实产出；严格区分已完成、进行中、待确认；没有内容的栏目直接删除；像本人给同事同步，少用套话；明日计划最多 3 条，只能来自记录中的待办或下一步；不写应用时长、空指标表、虚构数字、预计完成时间或额外总结。"#;
+要求：技术运营视角——优先写为团队/业务提效的动作（工具/配置上线、需求提交与排期跟进、推动开发进度、上线验收、上线后答疑与问题解决、业务协同），每件事写清楚对谁有什么影响；开发实现过程（环境调试、写脚本、终端操作、代码细节）一律不写，开发只在“交付了什么、给谁用”层面写一句；按项目合并重复记录，一件事只出现一次；严格区分已完成/进行中/待确认；没有内容的栏目直接删除；明日计划最多 3 条，只能来自记录中的待办或下一步；不写应用时长、空指标表、虚构数字、预计完成时间或额外总结。"#;
 
 pub const DEFAULT_WEEKLY_TEMPLATE: &str = r#"📊 周报复盘（M月D日 - M月D日）
 
-### 1. 项目/能力：一句话写清本周进展和当前状态
-- 写本周真正完成、对齐或验证的事实，保留业务数据、结论和文档产出。
-- 仍在推进、待确认、预计上线的内容直接写在对应项目下，不要写成已完成。
-- 一个项目只保留 2-4 条最有用的信息；同一项目的完成事项、问题和下一步合并写。
+## 一、本周收获（回答“本周有什么收获”，必须写）
+- 收获一：本周做成/想清楚了什么，具体到事实（上线了什么、解决了什么问题、推进了什么需求），写明对团队/业务的影响
+- 收获二：…
 
-### 2. 项目/能力：一句话写清本周进展和当前状态
-- 按同样方式写事实和下一步。
+## 二、项目进展（只写本周有实质推进的项目）
+### 1. 项目名：本周变化 + 当前状态
+- 本周新增/变化的 2-3 条事实（完成、对齐、验证、上线、答疑）
+- 仍在推进、待确认的内容直接写明状态，不要写成已完成
 
-## 二、下周工作计划
+### 2. 项目名：本周变化 + 当前状态
+- 按同样方式写事实和下一步
+
+## 三、下周工作计划
 | 优先级 | 计划动作 | 预期产出 |
 | --- | --- | --- |
 | P0 | 具体动作 | 具体产出 |
 
-要求：按项目合并重复记录；项目标题使用“项目名：本周进展 + 当前状态”，不要按时间流水账罗列；优先写业务已经能用的能力、明确结论和真实产出；测试数据写清窗口、样本量和当前判断，小样本只能写成方向验证；需要协调的事项直接放进对应项目或计划中，只有确实存在且无法归入项目时才单独增加章节；没有内容的章节直接删除；不编造数字、日期、负责人、风险或完成状态；不写应用时长、泛泛总结、空指标表和 AI 套话；下周计划最多 4 条，只能来自本周记录中的待办或自然衔接的下一步。"#;
+要求：按项目合并重复记录；只写本周有实质变化/推进的项目，一周内没有任何新动作的项目直接删除，禁止每周复制同一段描述；项目标题使用“项目名：本周变化 + 当前状态”；优先写业务已经能用的能力、明确结论和真实产出；测试数据写清窗口、样本量和当前判断，小样本只能写成方向验证；需要协调的事项直接放进对应项目或计划中，只有确实存在且无法归入项目时才单独增加章节；没有内容的章节直接删除；不编造数字、日期、负责人、风险或完成状态；不写应用时长、泛泛总结、空指标表和 AI 套话；下周计划最多 4 条，只能来自本周记录中的待办或自然衔接的下一步。"#;
 
 impl Default for Settings {
     fn default() -> Self {
@@ -198,29 +202,14 @@ pub fn settings_path() -> PathBuf {
     data_dir().join("settings.json")
 }
 
-/// 当天取数起点（日报生成与推送共用）：
-/// - 上次推送不是今天 → 用上次推送时刻。这样周一/周二休息日没推送时，
-///   周三的日报会把周末以来的工作一起带上，不会漏；
-/// - 上次推送就是今天 → 用昨天推送时刻，重推/预览都看完整一天，
-///   而不是只剩推送之后的十几分钟。
-pub fn day_window_start() -> String {
-    let s = load_settings();
-    let now = chrono::Local::now();
-    let today = now.format("%Y-%m-%d").to_string();
-    let file = data_dir().join("last_push.json");
-    if let Ok(text) = std::fs::read_to_string(&file) {
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
-            if let Some(ts) = v.get("ts").and_then(|x| x.as_str()) {
-                if !ts.starts_with(&today) {
-                    return ts.to_string();
-                }
-            }
-        }
-    }
-    let yesterday = (now.date_naive() - chrono::Duration::days(1))
-        .format("%Y-%m-%d")
-        .to_string();
-    format!("{yesterday}T{:02}:{:02}:00", s.feishu_push_hour, s.feishu_push_minute)
+/// 自然日窗口：[(date) 00:00:00, (date+1) 00:00:00)。
+/// 按自然日记录：过 0 点就算下一天，不跨天、不并入前一日。
+pub fn natural_day_window(date: &str) -> (String, String) {
+    let Ok(d) = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") else {
+        return (String::new(), String::new());
+    };
+    let next = (d + chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
+    (format!("{date}T00:00:00"), format!("{next}T00:00:00"))
 }
 
 /// 工作周锚点：所属周期的周三（工作周期 = 周三 ~ 周日，周一周二休息）
@@ -230,7 +219,7 @@ pub fn week_start_wednesday(anchor: chrono::NaiveDate) -> chrono::NaiveDate {
     anchor - chrono::Duration::days(back as i64)
 }
 
-/// 记录上次成功推送时刻（供跨日窗口去重）
+/// 记录上次成功推送时刻（供概览“已推送”状态与同日去重）
 pub fn mark_pushed(ts: &str) {
     let _ = std::fs::write(
         data_dir().join("last_push.json"),
@@ -251,17 +240,6 @@ pub fn save_report(date: &str, text: &str) {
 
 pub fn load_report(date: &str) -> Option<String> {
     std::fs::read_to_string(reports_dir().join(format!("{date}.md"))).ok()
-}
-
-/// 某个历史日期的跨日窗口：[(D-1) 推送时刻, D 推送时刻)
-pub fn historical_window(date: &str) -> (String, String) {
-    let s = load_settings();
-    let Ok(d) = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") else {
-        return (String::new(), String::new());
-    };
-    let prev = (d - chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
-    let hh = format!("{:02}:{:02}:00", s.feishu_push_hour, s.feishu_push_minute);
-    (format!("{prev}T{hh}"), format!("{date}T{hh}"))
 }
 
 /// 运行日志（追加写）：采集/生成/推送的关键事件与错误，便于排查

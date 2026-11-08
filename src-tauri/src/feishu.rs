@@ -121,14 +121,12 @@ pub fn push(date: &str, force: bool) -> PushResult {
     if !s.feishu_enabled {
         return PushResult { ok: false, reason: "feishu_enabled=false".into(), record_ids: String::new(), digest_chars: 0, note: String::new() };
     }
-    // 推送取数窗口：今天用 day_window_start（覆盖周一/周二休息日空档，重推也看全天），
-    // 历史日期用该日期的固定跨日窗口。
-    let from = if date == crate::records::today_str() {
-        config::day_window_start()
-    } else {
-        config::historical_window(date).0
-    };
-    let digest = records::build_digest_window(&from);
+    // 推送取数窗口 = 当天自然日 00:00 起（过 0 点就算下一天，不跨天）；
+    // 历史日期（--date）也按该日期自己的自然日窗口取数。
+    let (from, day_end) = config::natural_day_window(date);
+    let now_ts = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
+    let to = if date == crate::records::today_str() { now_ts } else { day_end };
+    let digest = records::build_digest_range(&from, &to);
     if digest.is_empty() {
         return PushResult { ok: false, reason: "no_work_records".into(), record_ids: String::new(), digest_chars: 0, note: String::new() };
     }
@@ -222,7 +220,8 @@ pub fn push(date: &str, force: bool) -> PushResult {
     match result {
         Ok(v) => {
             // 记录本次推送时刻（跨日窗口去重的锚点）
-            config::mark_pushed(&chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string());
+            // 记录本次推送锚点：历史日期补推时写该日期，避免把「今天」误标为已推送
+            config::mark_pushed(&format!("{date}T00:00:00"));
             // 归档到飞书知识库文档（每天一段，长期沉淀）
             // 同一日期已归档过就跳过，避免重复推送把知识库写成重复段落。
             if s.knowledge_archive_enabled
