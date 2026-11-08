@@ -98,15 +98,26 @@ function renderTimeline() {
     const meta = [];
     if (r.progress) meta.push(`<span class="tl-progress">✅ ${esc(r.progress)}</span>`);
     if (r.todo) meta.push(`<span class="tl-todo">📌 ${esc(r.todo)}</span>`);
+    const ev = r.event_type && r.event_type !== '其他' ? chipEvent(r.event_type) : '';
     return `<div class="tl-item">
       <div class="tl-time">${fmtHM(r.ts)}</div>
       <div class="tl-main">
         <div class="tl-summary">${esc(r.summary)}</div>
         ${r.detail ? `<div class="tl-detail">${esc(r.detail)}</div>` : ''}
-        <div class="tl-meta">${chip(r.activity)}${meta.join('')}</div>
+        <div class="tl-meta">${ev}${chip(r.activity)}${meta.join('')}</div>
       </div>
     </div>`;
   }).join('');
+}
+
+/* 事件类型小徽章（工具上线/需求推进/答疑支持/开发实现/业务动作/会议/学习） */
+const EVENT_COLORS = {
+  '工具上线': '#0d9e6f', '需求推进': '#6366f1', '答疑支持': '#b45309',
+  '开发实现': '#7c3aed', '业务动作': '#0e7490', '会议': '#be185d', '学习': '#4d7c0f',
+};
+function chipEvent(ev) {
+  const c = EVENT_COLORS[ev] || '#64748b';
+  return `<span class="chip" style="color:${c};background:${c}18">${esc(ev)}</span>`;
 }
 
 function renderDirections(dist) {
@@ -373,6 +384,9 @@ async function loadSettings() {
   renderWeekdayPicker(s.daily_push_weekdays || [3, 4, 5, 6, 7]);
   document.getElementById('setDocToken').value = s.knowledge_doc_token || '';
   document.getElementById('setArchive').value = s.knowledge_archive_enabled ? '1' : '0';
+  document.getElementById('setImListen').value = s.im_listener_enabled ? '1' : '0';
+  document.getElementById('setImMerge').value = String(s.im_merge_minutes ?? 10);
+  document.getElementById('setImChatFilter').value = s.im_chat_filter || '';
   document.getElementById('setAutoVc').value = s.meeting_auto_vc ? '1' : '0';
   document.getElementById('setMeetingLinks').value = s.meeting_links || '';
   document.getElementById('setMeetingNotes').value = s.meeting_notes || '';
@@ -422,6 +436,9 @@ async function saveSettings() {
       .map(el => Number(el.value)).sort((a, b) => a - b);
     s.knowledge_doc_token = document.getElementById('setDocToken').value.trim();
     s.knowledge_archive_enabled = document.getElementById('setArchive').value === '1';
+    s.im_listener_enabled = document.getElementById('setImListen').value === '1';
+    s.im_merge_minutes = Math.min(60, Math.max(1, Number(document.getElementById('setImMerge').value) || 10));
+    s.im_chat_filter = document.getElementById('setImChatFilter').value;
     s.meeting_auto_vc = document.getElementById('setAutoVc').value === '1';
     s.meeting_links = document.getElementById('setMeetingLinks').value;
     s.meeting_notes = document.getElementById('setMeetingNotes').value;

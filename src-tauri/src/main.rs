@@ -4,6 +4,7 @@ mod analyze;
 mod capture;
 mod config;
 mod feishu;
+mod im_capture;
 mod knowledge;
 mod meetings;
 mod records;
@@ -310,7 +311,8 @@ fn main() {
             setup_tray(app.handle())?;
             let app_handle = app.handle().clone();
             capture::start_loop(app_handle.clone(), state.clone());
-            start_push_scheduler(app_handle);
+            start_push_scheduler(app_handle.clone());
+            im_capture::start_im_listener(app_handle);
             // 启动时按设置恢复记录状态
             let s = config::load_settings();
             state.set_running(s.recording_enabled);

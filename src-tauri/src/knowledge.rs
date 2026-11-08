@@ -48,6 +48,7 @@ pub fn import_dailylog_records(days: u32) -> Result<String, String> {
             let rec = records::Record {
                 ts: ts.clone(),
                 activity: records::normalize_activity(v["activity"].as_str().unwrap_or("other")),
+                event_type: v["event_type"].as_str().unwrap_or("其他").to_string(),
                 summary: v["summary"].as_str().unwrap_or("").to_string(),
                 detail: v["detail"].as_str().unwrap_or("").to_string(),
                 progress: v["progress"].as_str().unwrap_or("").to_string(),

@@ -47,6 +47,15 @@ pub struct Settings {
     /// 默认周三~周日：周一/周二休息不推送；周日这一行只入表、不单独提醒，供当晚周报聚合。
     #[serde(default = "d_push_weekdays")]
     pub daily_push_weekdays: Vec<u32>,
+    /// 飞书消息监听：把自己在飞书群/私聊里发的文本消息自动记录为「答疑支持」事件
+    #[serde(default = "d_true")]
+    pub im_listener_enabled: bool,
+    /// 同一会话内多少分钟内合并成一条记录
+    #[serde(default = "d_im_merge")]
+    pub im_merge_minutes: u64,
+    /// 会话名关键词（每行一个，命中才记录；留空=记录所有会话）
+    #[serde(default)]
+    pub im_chat_filter: String,
     /// 是否由 WorkLog 本地生成日报（带个人模板+知识沉淀），推送时直接带上
     #[serde(default = "d_true")]
     pub local_report_enabled: bool,
@@ -82,6 +91,7 @@ fn d_dept() -> String { "转化".into() }
 fn d_hour() -> u32 { 18 }
 fn d_minute() -> u32 { 10 }
 fn d_push_weekdays() -> Vec<u32> { vec![3, 4, 5, 6, 7] }
+fn d_im_merge() -> u64 { 10 }
 fn default_work_directions() -> Vec<String> {
     vec![
         "团队技术赋能与工具提效（工具/配置上线、需求提交与排期跟进、上线验收、答疑支持、培训）".into(),
@@ -167,6 +177,9 @@ impl Default for Settings {
             feishu_push_hour: 18,
             feishu_push_minute: 10,
             daily_push_weekdays: vec![3, 4, 5, 6, 7],
+            im_listener_enabled: true,
+            im_merge_minutes: 10,
+            im_chat_filter: String::new(),
             local_report_enabled: true,
             knowledge_doc_token: String::new(),
             knowledge_archive_enabled: true,

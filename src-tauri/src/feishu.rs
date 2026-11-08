@@ -17,7 +17,7 @@ pub struct PushResult {
     pub note: String,
 }
 
-fn find_lark() -> Result<PathBuf, String> {
+pub(crate) fn find_lark() -> Result<PathBuf, String> {
     if let Some(appdata) = std::env::var_os("APPDATA") {
         let cand = PathBuf::from(&appdata).join("npm").join("lark-cli.cmd");
         if cand.exists() {

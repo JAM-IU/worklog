@@ -8,6 +8,9 @@ use crate::config;
 pub struct Record {
     pub ts: String,
     pub activity: String,
+    /// 事件类型：工具上线 / 需求推进 / 答疑支持 / 开发实现 / 业务动作 / 会议 / 学习 / 其他
+    #[serde(default = "d_other")]
+    pub event_type: String,
     pub summary: String,
     pub detail: String,
     pub progress: String,
@@ -20,6 +23,21 @@ pub struct Record {
 }
 
 fn default_true() -> bool { true }
+fn d_other() -> String { "其他".into() }
+
+/// 事件类型 → 短标签（用于记录展示与统计）
+pub fn event_label(et: &str) -> &'static str {
+    match et {
+        "工具上线" => "工具上线",
+        "需求推进" => "需求推进",
+        "答疑支持" => "答疑支持",
+        "开发实现" => "开发实现",
+        "业务动作" => "业务动作",
+        "会议" => "会议",
+        "学习" => "学习",
+        _ => "其他",
+    }
+}
 
 /// 不需要汇报的关键词（设置页可用 exclude_keywords 追加）
 const DEFAULT_EXCLUDE_KEYWORDS: &[&str] = &[
@@ -185,7 +203,18 @@ fn digest_from_items(items: &[&Record]) -> String {
         return String::new();
     }
     let mut lines = vec!["今日工作记录（WorkLog 自动采集，重复快照已合并）：".to_string()];
+    // 事件类型统计：日报/周报直接用它做量化（上线 X 个工具、解决 X 个问题、推进 X 个需求）
+    let mut stats: Vec<(&str, usize)> = vec![
+        ("工具上线", 0), ("需求推进", 0), ("答疑支持", 0), ("开发实现", 0),
+        ("业务动作", 0), ("会议", 0), ("学习", 0),
+    ];
+    let mut stat_of = |et: &str| {
+        for s in stats.iter_mut() {
+            if s.0 == et { s.1 += 1; return; }
+        }
+    };
     let mut seen = std::collections::HashSet::new();
+    let mut segs: Vec<String> = Vec::new();
     for r in items {
         // 截图采集会连续得到相同任务但进展字段略有变化；按“分类 + 摘要”去重，
         // 避免同一件事被连续快照展开成多条。真正不同的任务仍会保留。
@@ -197,19 +226,38 @@ fn digest_from_items(items: &[&Record]) -> String {
         if key.is_empty() || !seen.insert(key) {
             continue;
         }
+        stat_of(&r.event_type);
         let hm: String = r.ts.chars().skip(11).take(5).collect();
-        let mut seg = format!("{}【{}】{}", hm, activity_label(&r.activity), r.summary.trim());
+        let ev = event_label(&r.event_type);
+        let mut seg = if ev == "其他" {
+            format!("{}【{}】{}", hm, activity_label(&r.activity), r.summary.trim())
+        } else {
+            format!("{}【{}｜{}】{}", hm, ev, activity_label(&r.activity), r.summary.trim())
+        };
         if !r.progress.trim().is_empty() {
             seg.push_str(&format!("｜进展：{}", r.progress.trim()));
         }
         if !r.todo.trim().is_empty() {
             seg.push_str(&format!("｜待办：{}", r.todo.trim()));
         }
-        lines.push(seg);
+        segs.push(seg);
+    }
+    let stat_line: Vec<String> = stats
+        .iter()
+        .filter(|(_, n)| *n > 0)
+        .map(|(k, n)| format!("{k} {n}"))
+        .collect();
+    if !stat_line.is_empty() {
+        lines.push(format!("事件统计（AI 初判，仅供参考）：{}", stat_line.join(" · ")));
     }
     // 限长时保留「最新」的记录（尾部），而不是最旧的前 2000 字——
-    // 否则跨多日的窗口会整段丢掉今天下午/晚上的工作，日报对不上当天记录。
+    // 否则窗口会整段丢掉当天下午/晚上的工作，日报对不上当天记录。
     let header = lines.remove(0);
+    let stat_header = if !lines.is_empty() && lines[0].starts_with("事件统计") {
+        Some(lines.remove(0))
+    } else {
+        None
+    };
     let mut kept: Vec<String> = Vec::new();
     let mut len = 0usize;
     for seg in lines.iter().rev() {
@@ -222,6 +270,9 @@ fn digest_from_items(items: &[&Record]) -> String {
     }
     kept.reverse();
     let mut out = vec![header];
+    if let Some(sh) = stat_header {
+        out.push(sh);
+    }
     out.extend(kept);
     out.join("\n")
 }

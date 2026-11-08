@@ -252,6 +252,15 @@
                 <option value="1">开启（每天归档到知识库文档）</option>
                 <option value="0">关闭</option>
               </select></div>
+              <div class="set-row"><label>消息监听</label><select id="setImListen">
+                <option value="1">开启（自动记录本人在飞书的回复为「答疑支持」）</option>
+                <option value="0">关闭</option>
+              </select></div>
+              <div class="set-row"><label>合并窗口</label><input id="setImMerge" class="mini" type="number" min="1" max="60" /><span class="card-hint">分钟内同一会话合并为一条记录</span></div>
+              <div class="set-row-col">
+                <label>会话过滤（可选，每行一个关键词，命中才记录；留空记录所有会话）</label>
+                <textarea id="setImChatFilter" rows="2" placeholder="例如：转化、答疑"></textarea>
+              </div>
             </div>
             <div class="set-group">
               <h3>会议纪要自动抓取（业务结论的主要来源）</h3>
