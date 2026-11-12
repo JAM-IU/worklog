@@ -47,6 +47,12 @@ pub fn run_lark_json(args: &[&str]) -> Result<Value, String> {
     let out = Command::new(lark)
         .args(args)
         .creation_flags(CREATE_NO_WINDOW) // 抑制子进程的 CMD 黑窗闪现
+        // 直连飞书：本机代理（Clash 等）可能把 open.feishu.cn 路由到坏节点导致 token 刷新 EOF，
+        // 强制子进程不走 HTTP(S)_PROXY / ALL_PROXY
+        .env("NO_PROXY", "*")
+        .env_remove("HTTP_PROXY")
+        .env_remove("HTTPS_PROXY")
+        .env_remove("ALL_PROXY")
         .output()
         .map_err(|e| format!("启动 lark-cli 失败: {e}"))?;
     let text = format!(

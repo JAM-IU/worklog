@@ -202,7 +202,7 @@ fn digest_from_items(items: &[&Record]) -> String {
     if items.is_empty() {
         return String::new();
     }
-    let mut lines = vec!["今日工作记录（WorkLog 自动采集，重复快照已合并）：".to_string()];
+    let header = "今日工作记录（WorkLog 自动采集，重复快照已合并）：".to_string();
     // 事件类型统计：日报/周报直接用它做量化（上线 X 个工具、解决 X 个问题、推进 X 个需求）
     let mut stats: Vec<(&str, usize)> = vec![
         ("工具上线", 0), ("需求推进", 0), ("答疑支持", 0), ("开发实现", 0),
@@ -247,20 +247,16 @@ fn digest_from_items(items: &[&Record]) -> String {
         .filter(|(_, n)| *n > 0)
         .map(|(k, n)| format!("{k} {n}"))
         .collect();
-    if !stat_line.is_empty() {
-        lines.push(format!("事件统计（AI 初判，仅供参考）：{}", stat_line.join(" · ")));
-    }
-    // 限长时保留「最新」的记录（尾部），而不是最旧的前 2000 字——
-    // 否则窗口会整段丢掉当天下午/晚上的工作，日报对不上当天记录。
-    let header = lines.remove(0);
-    let stat_header = if !lines.is_empty() && lines[0].starts_with("事件统计") {
-        Some(lines.remove(0))
+    let stat_header = if !stat_line.is_empty() {
+        Some(format!("事件统计（AI 初判，仅供参考）：{}", stat_line.join(" · ")))
     } else {
         None
     };
+    // 限长时保留「最新」的记录（尾部），而不是最旧的前 2000 字——
+    // 否则窗口会整段丢掉当天下午/晚上的工作，日报对不上当天记录。
     let mut kept: Vec<String> = Vec::new();
     let mut len = 0usize;
-    for seg in lines.iter().rev() {
+    for seg in segs.iter().rev() {
         let n = seg.chars().count() + 1;
         if !kept.is_empty() && len + n > 2000 {
             break;

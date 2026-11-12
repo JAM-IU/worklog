@@ -106,6 +106,11 @@ fn spawn_listener() -> Result<(Child, ChildStdin), String> {
     let mut cmd = Command::new(lark);
     cmd.args(["event", "consume", "im.message.receive_v1", "--as", "bot"])
         .creation_flags(CREATE_NO_WINDOW)
+        // 直连飞书（同 run_lark_json：避开坏代理导致的连接重置）
+        .env("NO_PROXY", "*")
+        .env_remove("HTTP_PROXY")
+        .env_remove("HTTPS_PROXY")
+        .env_remove("ALL_PROXY")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
