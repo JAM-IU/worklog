@@ -192,8 +192,8 @@ pub fn generate_report_for(date: &str) -> Result<String, String> {
     }
     let s = config::load_settings();
     let ctx = crate::knowledge::report_context(&s, 3000);
-    // 会议记录合并（业务结论的主要载体）——仅当天拉取，历史日期跳过
-    let meeting_text = if date == crate::records::today_str() && s.meeting_auto_fetch {
+    // 会议记录合并（业务结论的主要载体）——任何日期都拉取，历史补推也不能漏会议
+    let meeting_text = if s.meeting_auto_fetch {
         crate::meetings::fetch_meeting_text(&s, date)
     } else {
         String::new()
@@ -201,7 +201,7 @@ pub fn generate_report_for(date: &str) -> Result<String, String> {
     let meeting_block = if meeting_text.trim().is_empty() {
         String::new()
     } else {
-        format!("\n\n【今日会议（业务核心，优先提炼结论与待办）】\n{meeting_text}")
+        format!("\n\n【{date} 会议纪要（必选素材：有结论或待办的会议必须提炼成成果写进日报，每个有结论的会议至少一条；只有完全无结论的会议才可以不写）】\n{meeting_text}")
     };
     let prompt = format!(
         "你是帮本人整理日报的同事。今天是 {date}。请根据会议记录与原始工作记录写一份简短、像本人同步的日报。\n\n\
@@ -210,7 +210,7 @@ pub fn generate_report_for(date: &str) -> Result<String, String> {
          2) 技术运营视角：优先汇报为团队/业务提效的动作——工具或配置上线给谁用、需求提交与排期跟进、推动开发进度、上线验收、上线后答疑与问题解决、业务协同；每件事写清楚对谁有什么影响；\
          2.5) 记录开头的「事件统计」用于汇总量化（今天上线 X 个工具、解决 X 个问题），数字只能引用统计或记录本身，禁止编造；但数字绝不能替代具体内容——每项成果必须写出具体名称（哪个工具、哪个需求、什么问题主题），禁止出现“N 个工具”“若干需求”这类没有具体所指的表述；\
          3) 屏蔽开发细节：环境调试、写脚本过程、终端操作、代码排查这类只有自己能看懂的记录一律不写进日报；开发只在“交付了什么、给谁用”的层面写一句；\
-         4) 会议记录是业务核心：有明确结论或待办时优先提炼，工作轨迹只作为补充；\
+         4) 会议记录是业务核心：有结论或待办的会议必须提炼成成果主题（每个有结论的会议至少一条成果），工作轨迹只作为补充，禁止漏掉会议内容；\
          5) 严格区分已完成、进行中和待确认，不把\"正在处理\"写成\"已完成\"；禁止编造；\
          6) 没有内容的模板章节直接删除，不输出\"暂无\"、\"无\"、\"待补充\"；\
          7) 明日计划最多 3 条，只能来自记录中的待办或自然衔接的下一步；\
