@@ -33,6 +33,19 @@ fn cli_main() -> Result<(), String> {
         println!("day_list: {}", serde_json::to_string_pretty(&stats::day_list()).unwrap_or_default());
         std::process::exit(0);
     }
+    // 仅本地生成日报（不依赖飞书/网络鉴权，调试用）
+    if args.iter().any(|a| a == "--report") {
+        let date = args
+            .iter()
+            .position(|a| a == "--report")
+            .and_then(|i| args.get(i + 1).cloned())
+            .unwrap_or_else(records::today_str);
+        match analyze::generate_report_for(&date) {
+            Ok(text) => println!("{text}"),
+            Err(e) => println!("ERROR: {e}"),
+        }
+        std::process::exit(0);
+    }
     if args.iter().any(|a| a == "--weekly-report") {
         let week = args
             .iter()
