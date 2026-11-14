@@ -244,6 +244,7 @@ async function loadReport(date, regenerate) {
 let pickEvents = [];
 let pickEventsDate = '';
 const foldedGroups = new Set(); // 折叠中的事件类型（会话内记忆）
+const expandedClusters = new Set(); // 手动展开的主题簇（默认全部折叠）
 
 /* 归一化摘要：去空白/标点，用于判断“同一件事” */
 function normSummary(s) {
@@ -252,6 +253,13 @@ function normSummary(s) {
 
 /* 固定的事件类型展示顺序 */
 const EVENT_ORDER = ['工具上线', '需求推进', '答疑支持', '业务动作', '会议', '开发实现', '学习', '其他'];
+
+/* 工作方向标签（与后端 activity_label 对齐） */
+const DIR_LABELS = {
+  conversion: '转化运营', insight: '学情采集', script: '话术库', review: '复盘分析',
+  data_ops: '数据运营', parent_comm: '家长沟通', dev: '开发', writing: '文档',
+  meeting: '会议', research: '学习', browsing: '生活', other: '其他',
+};
 
 async function refreshEventPick(date) {
   pickEventsDate = date;
@@ -263,19 +271,19 @@ async function refreshEventPick(date) {
     const savedSet = saved ? new Set(saved) : null;
 
     // 第一步：相同事件合并（归一化摘要一致 = 同一件事的重复快照）
-    const merged = new Map(); // normKey -> {ev, ts, summary, keys:[], count}
+    const merged = new Map(); // normKey -> {ev, act, ts, summary, keys:[], count}
     for (const r of list) {
       const ev = r.event_type || '其他';
       const key = `${r.ts}|${r.summary}`;
       const nk = normSummary(r.summary);
       if (!nk) continue;
       if (!merged.has(nk)) {
-        merged.set(nk, { ev, ts: r.ts, summary: r.summary, keys: [], count: 0 });
+        merged.set(nk, { ev, act: r.activity || 'other', ts: r.ts, summary: r.summary, keys: [], count: 0 });
       }
       const m = merged.get(nk);
       m.keys.push(key);
       m.count += 1;
-      if (r.ts > m.ts) { m.ts = r.ts; m.summary = r.summary; }
+      if (r.ts > m.ts) { m.ts = r.ts; m.summary = r.summary; m.act = r.activity || m.act; }
     }
     pickEvents = [...merged.values()].map(m => ({ ...m, keys: m.keys }));
     if (!pickEvents.length) {
@@ -284,43 +292,68 @@ async function refreshEventPick(date) {
       return;
     }
 
-    // 第二步：按事件类型分组（固定顺序）
-    const groups = new Map();
+    // 第二步：类型组 → 方向主题簇（同一类型+同一工作方向归为一个簇，默认折叠）
+    const groups = new Map(); // ev -> Map(dir -> [events])
     for (const e of pickEvents) {
-      if (!groups.has(e.ev)) groups.set(e.ev, []);
-      groups.get(e.ev).push(e);
+      if (!groups.has(e.ev)) groups.set(e.ev, new Map());
+      const dirs = groups.get(e.ev);
+      const dir = e.act || 'other';
+      if (!dirs.has(dir)) dirs.set(dir, []);
+      dirs.get(dir).push(e);
     }
-    for (const arr of groups.values()) arr.sort((a, b) => (a.ts < b.ts ? 1 : -1));
+    for (const dirs of groups.values()) {
+      for (const arr of dirs.values()) arr.sort((a, b) => (a.ts < b.ts ? 1 : -1));
+    }
 
     const totalRaw = pickEvents.reduce((s, e) => s + e.count, 0);
-    hint.textContent = `${totalRaw} 条事件合并为 ${pickEvents.length} 项 · ${savedSet ? '已按上次勾选' : '默认全选'}`;
+    const totalClusters = [...groups.values()].reduce((s, dirs) => s + dirs.size, 0);
+    hint.textContent = `${totalRaw} 条事件 → ${pickEvents.length} 项 / ${totalClusters} 个主题 · ${savedSet ? '已按上次勾选' : '默认全选'}`;
 
     let html = '';
     for (const ev of EVENT_ORDER) {
       if (!groups.has(ev)) continue;
-      const arr = groups.get(ev);
-      const folded = foldedGroups.has(ev);
+      const dirs = groups.get(ev);
       const c = EVENT_COLORS[ev] || '#64748b';
-      const rowCount = arr.reduce((s, e) => s + e.count, 0);
+      const rowCount = [...dirs.values()].reduce((s, arr) => s + arr.reduce((x, e) => x + e.count, 0), 0);
+      const allEvents = [...dirs.values()].flat();
       html += `<div class="ev-group">
         <div class="ev-group-head" data-group="${esc(ev)}">
-          <span class="ev-group-arrow">${folded ? '▸' : '▾'}</span>
+          <span class="ev-group-arrow">${foldedGroups.has(ev) ? '▸' : '▾'}</span>
           <span class="ev-chip" style="color:${c};background:${c}18">${esc(ev)}</span>
-          <span class="ev-group-count">${arr.length} 项 / ${rowCount} 条</span>
+          <span class="ev-group-count">${dirs.size} 个主题 / ${rowCount} 条</span>
           <label class="ev-group-check" onclick="event.stopPropagation()">
-            <input type="checkbox" class="ev-group-checkbox" ${arr.every(e => (savedSet ? e.keys.some(k => savedSet.has(k)) : true)) ? 'checked' : ''}>
+            <input type="checkbox" class="ev-group-checkbox" ${allEvents.every(e => (savedSet ? e.keys.some(k => savedSet.has(k)) : true)) ? 'checked' : ''}>
           </label>
         </div>
-        <div class="ev-group-body${folded ? ' hidden' : ''}">`;
-      for (const e of arr) {
-        const on = savedSet ? e.keys.some(k => savedSet.has(k)) : true;
-        const keysJson = JSON.stringify(e.keys).replace(/"/g, '&quot;');
-        html += `<label class="ev-pick-row">
-          <input type="checkbox" data-keys="${keysJson}" ${on ? 'checked' : ''}>
-          <span class="ev-pick-time">${e.ts.slice(11, 16)}</span>
-          <span class="ev-pick-sum">${esc(e.summary)}</span>
-          ${e.count > 1 ? `<span class="ev-pick-dup">×${e.count}</span>` : ''}
-        </label>`;
+        <div class="ev-group-body${foldedGroups.has(ev) ? ' hidden' : ''}">`;
+      // 方向簇：默认折叠，显示方向名 + 项数 + 最新摘要预览
+      for (const [dir, arr] of dirs) {
+        const dLabel = DIR_LABELS[dir] || dir;
+        const clusterId = `cl-${ev}-${dir}`.replace(/[^a-zA-Z0-9-]/g, '_');
+        const clFolded = !expandedClusters.has(clusterId);
+        const cCount = arr.reduce((s, e) => s + e.count, 0);
+        html += `<div class="ev-cluster">
+          <div class="ev-cluster-head" data-cluster="${esc(clusterId)}">
+            <span class="ev-group-arrow">${clFolded ? '▸' : '▾'}</span>
+            <span class="ev-dir-chip">${esc(dLabel)}</span>
+            <span class="ev-group-count">${arr.length} 项 / ${cCount} 条</span>
+            <span class="ev-cluster-preview">${esc(arr[0].summary.slice(0, 30))}${arr[0].summary.length > 30 ? '…' : ''}</span>
+            <label class="ev-group-check" onclick="event.stopPropagation()">
+              <input type="checkbox" class="ev-cluster-checkbox" data-cluster="${esc(clusterId)}" ${arr.every(e => (savedSet ? e.keys.some(k => savedSet.has(k)) : true)) ? 'checked' : ''}>
+            </label>
+          </div>
+          <div class="ev-cluster-body${clFolded ? ' hidden' : ''}">`;
+        for (const e of arr) {
+          const on = savedSet ? e.keys.some(k => savedSet.has(k)) : true;
+          const keysJson = JSON.stringify(e.keys).replace(/"/g, '&quot;');
+          html += `<label class="ev-pick-row">
+            <input type="checkbox" data-keys="${keysJson}" ${on ? 'checked' : ''}>
+            <span class="ev-pick-time">${e.ts.slice(11, 16)}</span>
+            <span class="ev-pick-sum">${esc(e.summary)}</span>
+            ${e.count > 1 ? `<span class="ev-pick-dup">×${e.count}</span>` : ''}
+          </label>`;
+        }
+        html += `</div></div>`;
       }
       html += `</div></div>`;
     }
@@ -331,19 +364,36 @@ async function refreshEventPick(date) {
       h.addEventListener('click', () => {
         const g = h.dataset.group;
         if (foldedGroups.has(g)) foldedGroups.delete(g); else foldedGroups.add(g);
-        const body = h.nextElementSibling;
-        body.classList.toggle('hidden', foldedGroups.has(g));
+        h.nextElementSibling.classList.toggle('hidden', foldedGroups.has(g));
         h.querySelector('.ev-group-arrow').textContent = foldedGroups.has(g) ? '▸' : '▾';
+      });
+    });
+    // 簇折叠
+    box.querySelectorAll('.ev-cluster-head').forEach(h => {
+      h.addEventListener('click', () => {
+        const cid = h.dataset.cluster;
+        if (expandedClusters.has(cid)) expandedClusters.delete(cid); else expandedClusters.add(cid);
+        h.nextElementSibling.classList.toggle('hidden', !expandedClusters.has(cid));
+        h.querySelector('.ev-group-arrow').textContent = expandedClusters.has(cid) ? '▾' : '▸';
       });
     });
     // 组级全选
     box.querySelectorAll('.ev-group-checkbox').forEach(cb => {
       cb.addEventListener('change', () => {
-        const g = cb.closest('.ev-group').querySelector('.ev-group-body');
-        g.querySelectorAll('.ev-pick-row input').forEach(i => (i.checked = cb.checked));
+        const body = cb.closest('.ev-group').querySelector('.ev-group-body');
+        body.querySelectorAll('.ev-pick-row input').forEach(i => (i.checked = cb.checked));
+        body.querySelectorAll('.ev-cluster-checkbox').forEach(cc => (cc.checked = cb.checked));
       });
     });
-    // 行变化同步组头
+    // 簇级全选
+    box.querySelectorAll('.ev-cluster-checkbox').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const body = cb.closest('.ev-cluster').querySelector('.ev-cluster-body');
+        body.querySelectorAll('.ev-pick-row input').forEach(i => (i.checked = cb.checked));
+        syncGroupHeads();
+      });
+    });
+    // 行变化同步簇头与组头
     box.querySelectorAll('.ev-pick-row input').forEach(i => {
       i.addEventListener('change', syncGroupHeads);
     });
@@ -354,6 +404,12 @@ async function refreshEventPick(date) {
 }
 
 function syncGroupHeads() {
+  document.querySelectorAll('.ev-cluster').forEach(cl => {
+    const rows = [...cl.querySelectorAll('.ev-pick-row input')];
+    if (!rows.length) return;
+    const cb = cl.querySelector('.ev-cluster-checkbox');
+    if (cb) cb.checked = rows.every(i => i.checked);
+  });
   document.querySelectorAll('.ev-group').forEach(g => {
     const rows = [...g.querySelectorAll('.ev-pick-row input')];
     if (!rows.length) return;

@@ -192,7 +192,9 @@ pub fn build_digest_range_filtered(
                 && allowed.map_or(true, |s| s.contains(&record_key(r)))
         })
         .collect();
-    digest_from_items(&items)
+    // 有人工勾选（精选素材）时给足容量，别把勾选的事件截掉
+    let cap = if allowed.is_some() { 8000 } else { 4000 };
+    digest_from_items_cap(&items, cap)
 }
 
 /// 有记录的日期列表（降序，供日报回溯选择）
@@ -213,7 +215,9 @@ pub fn list_record_dates() -> Vec<String> {
     dates
 }
 
-fn digest_from_items(items: &[&Record]) -> String {
+/// 生成摘要，允许自定义限长。人工勾选过（精选素材）时用更大容量，
+/// 避免 100+ 条事件被 2000 字截掉一半、具体事件（如 T11.2 看板）无声消失。
+pub fn digest_from_items_cap(items: &[&Record], cap: usize) -> String {
     if items.is_empty() {
         return String::new();
     }
@@ -267,13 +271,13 @@ fn digest_from_items(items: &[&Record]) -> String {
     } else {
         None
     };
-    // 限长时保留「最新」的记录（尾部），而不是最旧的前 2000 字——
+    // 限长时保留「最新」的记录（尾部），而不是最旧的部分——
     // 否则窗口会整段丢掉当天下午/晚上的工作，日报对不上当天记录。
     let mut kept: Vec<String> = Vec::new();
     let mut len = 0usize;
     for seg in segs.iter().rev() {
         let n = seg.chars().count() + 1;
-        if !kept.is_empty() && len + n > 2000 {
+        if !kept.is_empty() && len + n > cap {
             break;
         }
         kept.push(seg.clone());
