@@ -219,10 +219,13 @@ async function loadReport(date, regenerate) {
   box.innerHTML = '<div class="empty"><div class="empty-emoji">⏳</div><p>正在生成日报…（首次约 20 秒）</p></div>';
   try {
     let text;
-    // 事件勾选面板已加载且日期一致 → 按勾选生成（勾了什么只汇总什么）
+    // 事件勾选面板已加载且日期一致 → 按勾选生成（勾了什么只汇总什么；
+    // 合并行会带上它包含的全部原始事件 key）
     if (regenerate && pickEventsDate === date && pickEvents.length) {
-      const keys = [...document.querySelectorAll('#eventPickList input:checked')]
-        .map(i => i.dataset.key);
+      const keys = [];
+      document.querySelectorAll('#eventPickList .ev-pick-row input:checked').forEach(i => {
+        try { (JSON.parse(i.dataset.keys) || []).forEach(k => keys.push(k)); } catch (e) { /* ignore */ }
+      });
       text = await invoke('preview_report_pick', { date, selectedKeys: keys });
     } else {
       text = await invoke('get_report', { date, regenerate: !!regenerate });
@@ -237,9 +240,18 @@ async function loadReport(date, regenerate) {
   }
 }
 
-/* ============ 事件勾选面板（人工精选进日报的事件） ============ */
+/* ============ 事件勾选面板（按类型分组折叠 + 相同事件合并） ============ */
 let pickEvents = [];
 let pickEventsDate = '';
+const foldedGroups = new Set(); // 折叠中的事件类型（会话内记忆）
+
+/* 归一化摘要：去空白/标点，用于判断“同一件事” */
+function normSummary(s) {
+  return (s || '').toLowerCase().replace(/[\s\u3000，。、；：！？（）()【】\[\]'"“”‘’·\-—…~～]/g, '');
+}
+
+/* 固定的事件类型展示顺序 */
+const EVENT_ORDER = ['工具上线', '需求推进', '答疑支持', '业务动作', '会议', '开发实现', '学习', '其他'];
 
 async function refreshEventPick(date) {
   pickEventsDate = date;
@@ -249,32 +261,105 @@ async function refreshEventPick(date) {
     const list = await invoke('day_records', { date });
     const saved = await invoke('get_selection', { date });
     const savedSet = saved ? new Set(saved) : null;
-    pickEvents = list.map(r => ({
-      key: `${r.ts}|${r.summary}`,
-      ts: r.ts,
-      ev: r.event_type || '其他',
-      summary: r.summary,
-    }));
+
+    // 第一步：相同事件合并（归一化摘要一致 = 同一件事的重复快照）
+    const merged = new Map(); // normKey -> {ev, ts, summary, keys:[], count}
+    for (const r of list) {
+      const ev = r.event_type || '其他';
+      const key = `${r.ts}|${r.summary}`;
+      const nk = normSummary(r.summary);
+      if (!nk) continue;
+      if (!merged.has(nk)) {
+        merged.set(nk, { ev, ts: r.ts, summary: r.summary, keys: [], count: 0 });
+      }
+      const m = merged.get(nk);
+      m.keys.push(key);
+      m.count += 1;
+      if (r.ts > m.ts) { m.ts = r.ts; m.summary = r.summary; }
+    }
+    pickEvents = [...merged.values()].map(m => ({ ...m, keys: m.keys }));
     if (!pickEvents.length) {
       box.innerHTML = '<div class="empty"><p>当天暂无记录</p></div>';
       hint.textContent = '';
       return;
     }
-    hint.textContent = `${pickEvents.length} 条事件 · ${savedSet ? '已按上次勾选' : '默认全选'}`;
-    box.innerHTML = pickEvents.map(e => {
-      const on = savedSet ? savedSet.has(e.key) : true;
-      const c = EVENT_COLORS[e.ev] || '#64748b';
-      return `<label class="ev-pick-row">
-        <input type="checkbox" data-key="${esc(e.key)}" ${on ? 'checked' : ''}>
-        <span class="ev-pick-time">${e.ts.slice(11, 16)}</span>
-        <span class="ev-chip" style="color:${c};background:${c}18">${esc(e.ev)}</span>
-        <span class="ev-pick-sum">${esc(e.summary)}</span>
-      </label>`;
-    }).join('');
+
+    // 第二步：按事件类型分组（固定顺序）
+    const groups = new Map();
+    for (const e of pickEvents) {
+      if (!groups.has(e.ev)) groups.set(e.ev, []);
+      groups.get(e.ev).push(e);
+    }
+    for (const arr of groups.values()) arr.sort((a, b) => (a.ts < b.ts ? 1 : -1));
+
+    const totalRaw = pickEvents.reduce((s, e) => s + e.count, 0);
+    hint.textContent = `${totalRaw} 条事件合并为 ${pickEvents.length} 项 · ${savedSet ? '已按上次勾选' : '默认全选'}`;
+
+    let html = '';
+    for (const ev of EVENT_ORDER) {
+      if (!groups.has(ev)) continue;
+      const arr = groups.get(ev);
+      const folded = foldedGroups.has(ev);
+      const c = EVENT_COLORS[ev] || '#64748b';
+      const rowCount = arr.reduce((s, e) => s + e.count, 0);
+      html += `<div class="ev-group">
+        <div class="ev-group-head" data-group="${esc(ev)}">
+          <span class="ev-group-arrow">${folded ? '▸' : '▾'}</span>
+          <span class="ev-chip" style="color:${c};background:${c}18">${esc(ev)}</span>
+          <span class="ev-group-count">${arr.length} 项 / ${rowCount} 条</span>
+          <label class="ev-group-check" onclick="event.stopPropagation()">
+            <input type="checkbox" class="ev-group-checkbox" ${arr.every(e => (savedSet ? e.keys.some(k => savedSet.has(k)) : true)) ? 'checked' : ''}>
+          </label>
+        </div>
+        <div class="ev-group-body${folded ? ' hidden' : ''}">`;
+      for (const e of arr) {
+        const on = savedSet ? e.keys.some(k => savedSet.has(k)) : true;
+        const keysJson = JSON.stringify(e.keys).replace(/"/g, '&quot;');
+        html += `<label class="ev-pick-row">
+          <input type="checkbox" data-keys="${keysJson}" ${on ? 'checked' : ''}>
+          <span class="ev-pick-time">${e.ts.slice(11, 16)}</span>
+          <span class="ev-pick-sum">${esc(e.summary)}</span>
+          ${e.count > 1 ? `<span class="ev-pick-dup">×${e.count}</span>` : ''}
+        </label>`;
+      }
+      html += `</div></div>`;
+    }
+    box.innerHTML = html;
+
+    // 组头折叠
+    box.querySelectorAll('.ev-group-head').forEach(h => {
+      h.addEventListener('click', () => {
+        const g = h.dataset.group;
+        if (foldedGroups.has(g)) foldedGroups.delete(g); else foldedGroups.add(g);
+        const body = h.nextElementSibling;
+        body.classList.toggle('hidden', foldedGroups.has(g));
+        h.querySelector('.ev-group-arrow').textContent = foldedGroups.has(g) ? '▸' : '▾';
+      });
+    });
+    // 组级全选
+    box.querySelectorAll('.ev-group-checkbox').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const g = cb.closest('.ev-group').querySelector('.ev-group-body');
+        g.querySelectorAll('.ev-pick-row input').forEach(i => (i.checked = cb.checked));
+      });
+    });
+    // 行变化同步组头
+    box.querySelectorAll('.ev-pick-row input').forEach(i => {
+      i.addEventListener('change', syncGroupHeads);
+    });
   } catch (e) {
     box.innerHTML = '<div class="empty"><p>加载事件失败</p></div>';
     hint.textContent = '';
   }
+}
+
+function syncGroupHeads() {
+  document.querySelectorAll('.ev-group').forEach(g => {
+    const rows = [...g.querySelectorAll('.ev-pick-row input')];
+    if (!rows.length) return;
+    const cb = g.querySelector('.ev-group-checkbox');
+    cb.checked = rows.every(i => i.checked);
+  });
 }
 
 /* ============ 周报 ============ */
@@ -579,10 +664,12 @@ function init() {
     refreshEventPick(e.target.value);
   });
   document.getElementById('evPickAll').addEventListener('click', () => {
-    document.querySelectorAll('#eventPickList input[type=checkbox]').forEach(i => (i.checked = true));
+    document.querySelectorAll('#eventPickList .ev-pick-row input').forEach(i => (i.checked = true));
+    syncGroupHeads();
   });
   document.getElementById('evPickNone').addEventListener('click', () => {
-    document.querySelectorAll('#eventPickList input[type=checkbox]').forEach(i => (i.checked = false));
+    document.querySelectorAll('#eventPickList .ev-pick-row input').forEach(i => (i.checked = false));
+    syncGroupHeads();
   });
   document.getElementById('evPickRegen').addEventListener('click', () => {
     loadReport(document.getElementById('reportDateSelect').value, true);
