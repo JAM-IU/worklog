@@ -43,7 +43,7 @@ function switchView(name) {
   document.getElementById('view-' + name).classList.remove('hidden');
   if (name === 'overview') refreshOverview();
   if (name === 'today') refreshDayList();
-  if (name === 'report') refreshReportDates().then(d => loadReport(d, false));
+  if (name === 'report') refreshReportDates().then(d => { loadReport(d, false); refreshEventPick(d); });
   if (name === 'weekly') refreshWeeks().then(w => loadWeekly(w, false));
   if (name === 'stats') refreshStats();
 }
@@ -218,7 +218,15 @@ async function loadReport(date, regenerate) {
   if (select && regenerate) select.disabled = true;
   box.innerHTML = '<div class="empty"><div class="empty-emoji">⏳</div><p>正在生成日报…（首次约 20 秒）</p></div>';
   try {
-    const text = await invoke('get_report', { date, regenerate: !!regenerate });
+    let text;
+    // 事件勾选面板已加载且日期一致 → 按勾选生成（勾了什么只汇总什么）
+    if (regenerate && pickEventsDate === date && pickEvents.length) {
+      const keys = [...document.querySelectorAll('#eventPickList input:checked')]
+        .map(i => i.dataset.key);
+      text = await invoke('preview_report_pick', { date, selectedKeys: keys });
+    } else {
+      text = await invoke('get_report', { date, regenerate: !!regenerate });
+    }
     currentReport = text;
     box.innerHTML = `<textarea id="reportEditor" class="report-editor" spellcheck="false">${esc(text)}</textarea>`;
   } catch (e) {
@@ -226,6 +234,46 @@ async function loadReport(date, regenerate) {
   } finally {
     if (btn && regenerate) { btn.disabled = false; btn.innerHTML = btn.dataset.oldText || '✨ 生成日报'; }
     if (select && regenerate) select.disabled = false;
+  }
+}
+
+/* ============ 事件勾选面板（人工精选进日报的事件） ============ */
+let pickEvents = [];
+let pickEventsDate = '';
+
+async function refreshEventPick(date) {
+  pickEventsDate = date;
+  const box = document.getElementById('eventPickList');
+  const hint = document.getElementById('evPickHint');
+  try {
+    const list = await invoke('day_records', { date });
+    const saved = await invoke('get_selection', { date });
+    const savedSet = saved ? new Set(saved) : null;
+    pickEvents = list.map(r => ({
+      key: `${r.ts}|${r.summary}`,
+      ts: r.ts,
+      ev: r.event_type || '其他',
+      summary: r.summary,
+    }));
+    if (!pickEvents.length) {
+      box.innerHTML = '<div class="empty"><p>当天暂无记录</p></div>';
+      hint.textContent = '';
+      return;
+    }
+    hint.textContent = `${pickEvents.length} 条事件 · ${savedSet ? '已按上次勾选' : '默认全选'}`;
+    box.innerHTML = pickEvents.map(e => {
+      const on = savedSet ? savedSet.has(e.key) : true;
+      const c = EVENT_COLORS[e.ev] || '#64748b';
+      return `<label class="ev-pick-row">
+        <input type="checkbox" data-key="${esc(e.key)}" ${on ? 'checked' : ''}>
+        <span class="ev-pick-time">${e.ts.slice(11, 16)}</span>
+        <span class="ev-chip" style="color:${c};background:${c}18">${esc(e.ev)}</span>
+        <span class="ev-pick-sum">${esc(e.summary)}</span>
+      </label>`;
+    }).join('');
+  } catch (e) {
+    box.innerHTML = '<div class="empty"><p>加载事件失败</p></div>';
+    hint.textContent = '';
   }
 }
 
@@ -526,7 +574,19 @@ function init() {
   document.getElementById('genReportBtn').addEventListener('click', () => {
     loadReport(document.getElementById('reportDateSelect').value, true);
   });
-  document.getElementById('reportDateSelect').addEventListener('change', (e) => loadReport(e.target.value, false));
+  document.getElementById('reportDateSelect').addEventListener('change', (e) => {
+    loadReport(e.target.value, false);
+    refreshEventPick(e.target.value);
+  });
+  document.getElementById('evPickAll').addEventListener('click', () => {
+    document.querySelectorAll('#eventPickList input[type=checkbox]').forEach(i => (i.checked = true));
+  });
+  document.getElementById('evPickNone').addEventListener('click', () => {
+    document.querySelectorAll('#eventPickList input[type=checkbox]').forEach(i => (i.checked = false));
+  });
+  document.getElementById('evPickRegen').addEventListener('click', () => {
+    loadReport(document.getElementById('reportDateSelect').value, true);
+  });
   document.getElementById('copyReport').addEventListener('click', () => {
     const editor = document.getElementById('reportEditor');
     navigator.clipboard.writeText(editor ? editor.value : currentReport);

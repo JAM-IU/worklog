@@ -240,6 +240,25 @@ pub fn mark_pushed(ts: &str) {
     );
 }
 
+/// 当日「勾选进日报」的事件 key 列表（人工精选；无文件 = 全部事件）
+pub fn selection_path(date: &str) -> PathBuf {
+    let d = data_dir().join("selection");
+    let _ = std::fs::create_dir_all(&d);
+    d.join(format!("{date}.json"))
+}
+
+pub fn load_selection(date: &str) -> Option<Vec<String>> {
+    std::fs::read_to_string(selection_path(date))
+        .ok()
+        .and_then(|t| serde_json::from_str::<Vec<String>>(&t).ok())
+}
+
+pub fn save_selection(date: &str, keys: &[String]) {
+    if let Ok(data) = serde_json::to_string(keys) {
+        let _ = std::fs::write(selection_path(date), data);
+    }
+}
+
 pub fn reports_dir() -> PathBuf {
     let d = data_dir().join("reports");
     let _ = std::fs::create_dir_all(&d);

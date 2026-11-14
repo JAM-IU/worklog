@@ -154,8 +154,22 @@ pub fn is_work(rec: &Record) -> bool {
     !ENTERTAINMENT_KEYWORDS.iter().any(|k| hay.contains(k))
 }
 
+/// 记录稳定标识（勾选面板用它把「选中项」映射回记录行）
+pub fn record_key(rec: &Record) -> String {
+    format!("{}|{}", rec.ts, rec.summary.trim())
+}
+
 /// 指定日期区间的摘要（历史日报回溯用）：[from_ts, to_ts)
 pub fn build_digest_range(from_ts: &str, to_ts: &str) -> String {
+    build_digest_range_filtered(from_ts, to_ts, None)
+}
+
+/// 同上，但只保留 allowed 集合内的记录（用户勾选进日报的事件）；None = 全部
+pub fn build_digest_range_filtered(
+    from_ts: &str,
+    to_ts: &str,
+    allowed: Option<&std::collections::HashSet<String>>,
+) -> String {
     let now = Local::now();
     let mut all: Vec<Record> = Vec::new();
     let from_date = &from_ts[..10.min(from_ts.len())];
@@ -175,6 +189,7 @@ pub fn build_digest_range(from_ts: &str, to_ts: &str) -> String {
                 && is_work(r)
                 && !r.summary.trim().is_empty()
                 && r.summary != "无工作活动"
+                && allowed.map_or(true, |s| s.contains(&record_key(r)))
         })
         .collect();
     digest_from_items(&items)

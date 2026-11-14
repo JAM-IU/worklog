@@ -133,6 +133,23 @@ async fn preview_report() -> Result<String, String> {
         .map_err(|e| format!("日报任务异常退出: {e}"))?
 }
 
+/// 读取某天的人工勾选（None = 从未勾选过，前端默认全选）
+#[tauri::command]
+fn get_selection(date: String) -> Option<Vec<String>> {
+    config::load_selection(&date)
+}
+
+/// 保存勾选并按勾选重新生成该日期日报
+#[tauri::command]
+async fn preview_report_pick(date: String, selected_keys: Vec<String>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        config::save_selection(&date, &selected_keys);
+        analyze::generate_report_for(&date)
+    })
+    .await
+    .map_err(|e| format!("日报任务异常退出: {e}"))?
+}
+
 #[tauri::command]
 fn set_recording(state: tauri::State<Arc<CaptureState>>, enabled: bool) {
     state.set_running(enabled);
@@ -337,6 +354,8 @@ fn main() {
             get_today_records,
             push_now,
             preview_report,
+            get_selection,
+            preview_report_pick,
             set_recording,
             get_recording,
             import_dailylog,

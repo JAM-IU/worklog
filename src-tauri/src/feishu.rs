@@ -129,10 +129,13 @@ pub fn push(date: &str, force: bool) -> PushResult {
     }
     // 推送取数窗口 = 当天自然日 00:00 起（过 0 点就算下一天，不跨天）；
     // 历史日期（--date）也按该日期自己的自然日窗口取数。
+    // 有人工勾选时只推勾选的事件。
     let (from, day_end) = config::natural_day_window(date);
     let now_ts = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
     let to = if date == crate::records::today_str() { now_ts } else { day_end };
-    let digest = records::build_digest_range(&from, &to);
+    let allowed: Option<std::collections::HashSet<String>> =
+        config::load_selection(date).map(|v| v.into_iter().collect());
+    let digest = records::build_digest_range_filtered(&from, &to, allowed.as_ref());
     if digest.is_empty() {
         return PushResult { ok: false, reason: "no_work_records".into(), record_ids: String::new(), digest_chars: 0, note: String::new() };
     }

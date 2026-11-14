@@ -186,7 +186,11 @@ pub fn generate_report_for(date: &str) -> Result<String, String> {
     if from.is_empty() {
         return Err(format!("无效日期: {date}"));
     }
-    let digest = crate::records::build_digest_range(&from, &to);
+    // 人工勾选：用户在「选择进日报的事件」里勾了哪些，日报就只汇总哪些；
+    // 没有勾选记录（文件不存在）时回到默认全量。
+    let allowed: Option<std::collections::HashSet<String>> =
+        config::load_selection(date).map(|v| v.into_iter().collect());
+    let digest = crate::records::build_digest_range_filtered(&from, &to, allowed.as_ref());
     if digest.is_empty() {
         return Ok(format!("{date} 没有工作记录（窗口 {from} ~ {to}）。").into());
     }
@@ -216,7 +220,8 @@ pub fn generate_report_for(date: &str) -> Result<String, String> {
          7) 明日计划最多 3 条，只能来自记录中的待办或自然衔接的下一步；\
          8) 少用\"赋能\"、\"闭环\"、\"抓手\"、\"夯实\"等套话，不写空泛价值判断；\
          9) 不输出应用时长、空指标表、预计完成时间、额外总结或元评论；\
-         10) 【最重要】历史参考样本只用于学习写作风格与颗粒度：样本里的具体事项、项目名、数字、结论一律禁止写进今天的日报；今天日报的全部事实必须且只能来自【今日原始工作记录】与【今日会议】，两者都没有的内容视为不存在。{ctx}{meeting_block}\n\n【今日原始工作记录】\n{digest}\n\n直接输出日报正文。"
+         10) 【最重要】历史参考样本只用于学习写作风格与颗粒度：样本里的具体事项、项目名、数字、结论一律禁止写进今天的日报；今天日报的全部事实必须且只能来自【今日原始工作记录】与【今日会议】，两者都没有的内容视为不存在；\
+         11) 记录里的事件是被人工勾选过的素材：每条要么合并进成果/推进中，要么是同一主题的重复快照，不允许整条无声消失——尤其是名字里带具体项目/看板/系统名的事件（如“T11.2 转化明细数据看板”）。{ctx}{meeting_block}\n\n【今日原始工作记录】\n{digest}\n\n直接输出日报正文。"
     );
     let body = build_body(&s, json!([{"role": "user", "content": prompt}]), 4096, 0.7);
     let content = chat(&s, body, "日报生成")?;
